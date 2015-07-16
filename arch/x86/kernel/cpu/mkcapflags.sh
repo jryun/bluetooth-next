@@ -19,14 +19,14 @@ dump_array()
 	echo "const char * const $ARRAY[$SIZE] = {"
 
 	# Iterate through any input lines starting with #define $PFX
-	sed -n -e 's/\t/ /g' -e "s/^ *# *define *$PFX//p" $IN |
+	gsed -n -e 's/\t/ /g' -e "s/^ *# *define *$PFX//p" $IN |
 	while read i
 	do
 		# Name is everything up to the first whitespace
-		NAME="$(echo "$i" | sed 's/ .*//')"
+		NAME="$(echo "$i" | gsed 's/ .*//')"
 
 		# If the /* comment */ starts with a quote string, grab that.
-		VALUE="$(echo "$i" | sed -n 's@.*/\* *\("[^"]*"\).*\*/@\1@p')"
+		VALUE="$(echo "$i" | gsed -n 's@.*/\* *\("[^"]*"\).*\*/@\1@p')"
 		[ -z "$VALUE" ] && VALUE="\"$NAME\""
 		[ "$VALUE" = '""' ] && continue
 
