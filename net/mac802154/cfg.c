@@ -272,6 +272,22 @@ ieee802154_set_lbt_mode(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	return 0;
 }
 
+static int
+ieee802154_set_assoc_request(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+							u8 coord_channel, u8 coord_page, u8 addr_mode,
+							__le16 coord_pan_id, __le64 coord_addr, u8 capability_info)
+{
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	int ret = 0;
+
+	ASSERT_RTNL();
+
+	drv_assoc_req( local, coord_channel,
+			coord_page, addr_mode, coord_pan_id, coord_addr, capability_info );
+
+	return ret;
+}
+
 const struct cfg802154_ops mac802154_config_ops = {
 	.add_virtual_intf_deprecated = ieee802154_add_iface_deprecated,
 	.del_virtual_intf_deprecated = ieee802154_del_iface_deprecated,
@@ -289,4 +305,5 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_max_csma_backoffs = ieee802154_set_max_csma_backoffs,
 	.set_max_frame_retries = ieee802154_set_max_frame_retries,
 	.set_lbt_mode = ieee802154_set_lbt_mode,
+	.set_assoc_request = ieee802154_set_assoc_request,
 };

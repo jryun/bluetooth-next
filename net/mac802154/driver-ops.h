@@ -284,4 +284,13 @@ drv_set_promiscuous_mode(struct ieee802154_local *local, bool on)
 	return ret;
 }
 
+static inline int
+drv_assoc_req(struct ieee802154_local *local, u8 coord_channel,
+		u8 coord_page, u8 addr_mode, __le16 coord_pan_id,
+		__le64 coord_addr, u8 capability_info )
+{
+	int ret;
+	//do something here haha
+	return ret;
+}
 #endif /* __MAC802154_DRIVER_OPS */

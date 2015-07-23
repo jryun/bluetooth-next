@@ -195,4 +195,18 @@ rdev_set_lbt_mode(struct cfg802154_registered_device *rdev,
 	return ret;
 }
 
+static inline int
+rdev_set_association_request(struct cfg802154_registered_device *rdev,
+				struct wpan_dev *wpan_dev, u8 coord_channel, u8 coord_page,
+				u8 addr_mode, __le16 coord_pan_id, __le64 coord_addr,
+				u8 capability_info)
+{
+	int ret = 0;
+
+	ret = rdev->ops->set_assoc_request(&rdev->wpan_phy, wpan_dev, coord_channel,
+			coord_page, addr_mode, coord_pan_id, coord_addr, capability_info );
+
+	return ret;
+}
+
 #endif /* __CFG802154_RDEV_OPS */

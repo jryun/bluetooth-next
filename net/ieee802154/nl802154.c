@@ -230,6 +230,16 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
 	[NL802154_ATTR_WPAN_PHY_CAPS] = { .type = NLA_NESTED },
 
 	[NL802154_ATTR_SUPPORTED_COMMANDS] = { .type = NLA_NESTED },
+
+	[NL802154_ATTR_ADDRESS_MODE] = { .type = NLA_U8 },
+
+	[NL802154_ATTR_CAPABILITY_INFO] = { .type = NLA_U8 },
+
+	[NL802154_ATTR_CONFIRM_STATUS] = { .type = NLA_U8 },
+
+	[NL802154_ATTR_COORD_SHORT_ADDR] = { .type = NLA_U16 },
+
+	[NL802154_ATTR_COORD_EXT_ADDR] = { .type = NLA_U64 },
 };
 
 /* message building helper */
@@ -1042,6 +1052,62 @@ static int nl802154_set_lbt_mode(struct sk_buff *skb, struct genl_info *info)
 	return rdev_set_lbt_mode(rdev, wpan_dev, mode);
 }
 
+static int nl802154_set_assoc_request(struct sk_buff *skb, struct genl_info *info)
+{
+	struct cfg802154_registered_device *rdev = info->user_ptr[0];
+	struct net_device *dev = info->user_ptr[1];
+	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+
+	u8 coord_channel;
+	u8 coord_page;
+	enum nl802154_address_modes addr_mode;
+	__le16 coord_pan_id;
+	__le64 coord_addr;
+	u8 capability_info;
+
+	/* conflict here while tx/rx calls */
+	if (netif_running(dev))
+		return -EBUSY;
+
+	if (!info->attrs[NL802154_ATTR_CHANNEL] ||
+		!info->attrs[NL802154_ATTR_PAGE] ||
+		!info->attrs[NL802154_ATTR_ADDRESS_MODE] ||
+		!info->attrs[NL802154_ATTR_PAN_ID] ||
+		!info->attrs[NL802154_ATTR_CAPABILITY_INFO]
+		) return -EINVAL;
+
+	coord_channel = nla_get_u8(info->attrs[NL802154_ATTR_CHANNEL]);
+	coord_page = nla_get_u8(info->attrs[NL802154_ATTR_PAGE]);
+	addr_mode = nla_get_u8(info->attrs[NL802154_ATTR_ADDRESS_MODE]);
+	coord_pan_id = nla_get_le16(info->attrs[NL802154_ATTR_PAN_ID]);
+	capability_info = nla_get_le16(info->attrs[NL802154_ATTR_CAPABILITY_INFO]);
+
+	if ( NL802154_ADDR_SHORT == addr_mode ){
+		if ( !info->attrs[NL802154_ATTR_SHORT_ADDR] ){
+			return -EINVAL;
+		} else {
+			coord_addr = nla_get_le16(info->attrs[NL802154_ATTR_SHORT_ADDR]);
+		}
+	} else {
+		if ( !info->attrs[NL802154_ATTR_EXTENDED_ADDR] ){
+			return -EINVAL;
+		} else {
+			coord_addr =(__force __le64)nla_get_u64(info->attrs[NL802154_ATTR_EXTENDED_ADDR]);
+		}
+	}
+
+	/* TODO
+	 * I am not sure about to check here on broadcast pan_id.
+	 * Broadcast is a valid setting, comment from 802.15.4:
+	 * If this value is 0xffff, the device is not associated.
+	 *
+	 * This could useful to simple disassociate an device.
+	 */
+	if (pan_id == cpu_to_le16(IEEE802154_PAN_ID_BROADCAST))
+		return -EINVAL;
+
+	return rdev_set_association_request(rdev, wpan_dev, coord_channel, coord_page, addr_mode, coord_pan_id, coord_addr, capability_info);
+}
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
 #define NL802154_FLAG_NEED_NETDEV	0x02
 #define NL802154_FLAG_NEED_RTNL		0x04
@@ -1243,6 +1309,14 @@ static const struct genl_ops nl802154_ops[] = {
 	{
 		.cmd = NL802154_CMD_SET_LBT_MODE,
 		.doit = nl802154_set_lbt_mode,
+		.policy = nl802154_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL802154_FLAG_NEED_NETDEV |
+				  NL802154_FLAG_NEED_RTNL,
+	},
+	{
+		.cmd = NL802154_CMD_SET_ASSOC_REQUEST,
+		.doit = nl802154_set_assoc_request,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_NETDEV |
