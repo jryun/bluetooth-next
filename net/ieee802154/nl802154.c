@@ -26,6 +26,19 @@
 #include "rdev-ops.h"
 #include "core.h"
 
+/**
+ * enum nl802154_address_modes - address modes for 802.15.4
+ *
+ * @NL802154_ADDR_NO_ADDR: indicated there is no address
+ * @NL802154_ADDR_LONG: indicates address is long type
+ * @NL802154_ADDR_SHORT: indicates address is short type
+ */
+enum nl802154_address_modes {
+	NL802154_ADDR_NO_ADDR = 0x00,
+	NL802154_ADDR_SHORT = 0x02,
+	NL802154_ADDR_LONG = 0x03,
+};
+
 static int nl802154_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			     struct genl_info *info);
 
@@ -236,10 +249,6 @@ static const struct nla_policy nl802154_policy[NL802154_ATTR_MAX+1] = {
 	[NL802154_ATTR_CAPABILITY_INFO] = { .type = NLA_U8 },
 
 	[NL802154_ATTR_CONFIRM_STATUS] = { .type = NLA_U8 },
-
-	[NL802154_ATTR_COORD_SHORT_ADDR] = { .type = NLA_U16 },
-
-	[NL802154_ATTR_COORD_EXT_ADDR] = { .type = NLA_U64 },
 };
 
 /* message building helper */
@@ -468,6 +477,7 @@ static int nl802154_send_wpan_phy(struct cfg802154_registered_device *rdev,
 	CMD(set_max_csma_backoffs, SET_MAX_CSMA_BACKOFFS);
 	CMD(set_max_frame_retries, SET_MAX_FRAME_RETRIES);
 	CMD(set_lbt_mode, SET_LBT_MODE);
+	CMD(set_assoc_req, SET_ASSOC_REQ);
 
 	if (rdev->wpan_phy.flags & WPAN_PHY_FLAG_TXPOWER)
 		CMD(set_tx_power, SET_TX_POWER);
@@ -1052,7 +1062,7 @@ static int nl802154_set_lbt_mode(struct sk_buff *skb, struct genl_info *info)
 	return rdev_set_lbt_mode(rdev, wpan_dev, mode);
 }
 
-static int nl802154_set_assoc_request(struct sk_buff *skb, struct genl_info *info)
+static int nl802154_set_assoc_req(struct sk_buff *skb, struct genl_info *info)
 {
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
@@ -1106,7 +1116,7 @@ static int nl802154_set_assoc_request(struct sk_buff *skb, struct genl_info *inf
 	if (pan_id == cpu_to_le16(IEEE802154_PAN_ID_BROADCAST))
 		return -EINVAL;
 
-	return rdev_set_association_request(rdev, wpan_dev, coord_channel, coord_page, addr_mode, coord_pan_id, coord_addr, capability_info);
+	return rdev_set_assoc_req(rdev, wpan_dev, coord_channel, coord_page, addr_mode, coord_pan_id, coord_addr, capability_info);
 }
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
 #define NL802154_FLAG_NEED_NETDEV	0x02
@@ -1315,8 +1325,8 @@ static const struct genl_ops nl802154_ops[] = {
 				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
-		.cmd = NL802154_CMD_SET_ASSOC_REQUEST,
-		.doit = nl802154_set_assoc_request,
+		.cmd = NL802154_CMD_SET_ASSOC_REQ,
+		.doit = nl802154_set_assoc_req,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_NETDEV |
