@@ -1073,6 +1073,7 @@ static int nl802154_set_assoc_req(struct sk_buff *skb, struct genl_info *info)
 	enum nl802154_address_modes addr_mode;
 	__le16 coord_pan_id;
 	__le64 coord_addr;
+	__le64 src_addr;
 	u8 capability_info;
 
 	/* conflict here while tx/rx calls */
@@ -1083,40 +1084,32 @@ static int nl802154_set_assoc_req(struct sk_buff *skb, struct genl_info *info)
 		!info->attrs[NL802154_ATTR_PAGE] ||
 		!info->attrs[NL802154_ATTR_ADDRESS_MODE] ||
 		!info->attrs[NL802154_ATTR_PAN_ID] ||
-		!info->attrs[NL802154_ATTR_CAPABILITY_INFO]
+		!info->attrs[NL802154_ATTR_CAPABILITY_INFO] ||
+		!info->attrs[NL802154_ATTR_EXTENDED_ADDR]
 		) return -EINVAL;
 
 	coord_channel = nla_get_u8(info->attrs[NL802154_ATTR_CHANNEL]);
 	coord_page = nla_get_u8(info->attrs[NL802154_ATTR_PAGE]);
 	addr_mode = nla_get_u8(info->attrs[NL802154_ATTR_ADDRESS_MODE]);
 	coord_pan_id = nla_get_le16(info->attrs[NL802154_ATTR_PAN_ID]);
+	src_addr = (__force __le64)nla_get_u64(info->attrs[NL802154_ATTR_EXTENDED_ADDR]);
 	capability_info = nla_get_le16(info->attrs[NL802154_ATTR_CAPABILITY_INFO]);
 
 	if ( NL802154_ADDR_SHORT == addr_mode ){
 		if ( !info->attrs[NL802154_ATTR_SHORT_ADDR] ){
 			return -EINVAL;
 		} else {
-			coord_addr = nla_get_le16(info->attrs[NL802154_ATTR_SHORT_ADDR]);
+			coord_addr = nla_get_le16(info->attrs[NL802154_ATTR_COORD_SHORT_ADDR]);
 		}
 	} else {
 		if ( !info->attrs[NL802154_ATTR_EXTENDED_ADDR] ){
 			return -EINVAL;
 		} else {
-			coord_addr =(__force __le64)nla_get_u64(info->attrs[NL802154_ATTR_EXTENDED_ADDR]);
+			coord_addr =(__force __le64)nla_get_u64(info->attrs[NL802154_ATTR_COORD_EXTENDED_ADDR]);
 		}
 	}
 
-	/* TODO
-	 * I am not sure about to check here on broadcast pan_id.
-	 * Broadcast is a valid setting, comment from 802.15.4:
-	 * If this value is 0xffff, the device is not associated.
-	 *
-	 * This could useful to simple disassociate an device.
-	 */
-	if (pan_id == cpu_to_le16(IEEE802154_PAN_ID_BROADCAST))
-		return -EINVAL;
-
-	return rdev_set_assoc_req(rdev, wpan_dev, coord_channel, coord_page, addr_mode, coord_pan_id, coord_addr, capability_info);
+	return rdev_set_assoc_req(rdev, wpan_dev, coord_channel, coord_page, addr_mode, coord_pan_id, coord_addr, src_addr, capability_info);
 }
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
 #define NL802154_FLAG_NEED_NETDEV	0x02
