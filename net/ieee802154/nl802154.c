@@ -510,7 +510,7 @@ static int nl802154_send_wpan_phy(struct cfg802154_registered_device *rdev,
 	CMD(set_max_csma_backoffs, SET_MAX_CSMA_BACKOFFS);
 	CMD(set_max_frame_retries, SET_MAX_FRAME_RETRIES);
 	CMD(set_lbt_mode, SET_LBT_MODE);
-	CMD(set_assoc_req, SET_ASSOC_REQ);
+	CMD(set_assoc_req, ASSOC_REQ);
 	CMD(ed_scan, ED_SCAN_REQ);
 
 	if (rdev->wpan_phy.flags & WPAN_PHY_FLAG_TXPOWER)
@@ -1096,7 +1096,7 @@ static int nl802154_set_lbt_mode(struct sk_buff *skb, struct genl_info *info)
 	return rdev_set_lbt_mode(rdev, wpan_dev, mode);
 }
 
-static int nl802154_set_assoc_req(struct sk_buff *skb, struct genl_info *info)
+static int nl802154_assoc_req(struct sk_buff *skb, struct genl_info *info)
 {
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
@@ -1141,7 +1141,7 @@ static int nl802154_set_assoc_req(struct sk_buff *skb, struct genl_info *info)
 		}
 	}
 
-	return rdev_set_assoc_req(rdev, wpan_dev, coord_channel, coord_page, addr_mode, coord_pan_id, coord_addr, capability_info, src_addr);
+	return rdev_assoc_req(rdev, wpan_dev, coord_channel, coord_page, addr_mode, coord_pan_id, coord_addr, capability_info, src_addr);
 }
 static int nl802154_ed_scan_put_ed( struct sk_buff *reply, u8 result_list_size, u32 scan_channels, u8 *ed ) {
     int r;
@@ -1550,8 +1550,16 @@ static const struct genl_ops nl802154_ops[] = {
 				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
-		.cmd = NL802154_CMD_SET_ASSOC_REQ,
-		.doit = nl802154_set_assoc_req,
+		.cmd = NL802154_CMD_ASSOC_REQ,
+		.doit = nl802154_assoc_req,
+		.policy = nl802154_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL802154_FLAG_NEED_NETDEV |
+				  NL802154_FLAG_NEED_RTNL,
+	},
+	{
+		.cmd = NL802154_CMD_ASSOC_CNF,
+		.doit = nl802154_assoc_cnf,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_NETDEV |

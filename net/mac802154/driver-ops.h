@@ -307,10 +307,10 @@ drv_assoc_req(struct ieee802154_local *local, u8 coord_channel,
 	//pack socket buffer
 	int len;
 
-	len = sizeof(u8) + sizeof(u8) + sizeof(u16) + sizeof(u16) + sizeof(u16) + sizeof(u8) + sizeof(__le64);
+	len = sizeof(u16) + sizeof(u8) + sizeof(u16) + sizeof(u16) + sizeof(__le64) + sizeof(u8)  + sizeof(u8) ;
 	len += (addr_mode == 0x02) ? sizeof(u16) : sizeof(__le64);
 
-	u8 * data = malloc(len);
+	u8 * data = kzalloc(len, GFP_KERNEL);
 
 	u16 fcf;
 
@@ -324,7 +324,7 @@ drv_assoc_req(struct ieee802154_local *local, u8 coord_channel,
 		*(data + 2) = 0;
 		*(data + 3) = coord_pan_id;
 		*(data + 5) = (__le16*) coord_addr;
-		*(data + 7) = 0xFFFE;
+		*(data + 7) = 0xFFFF;
 		*(data + 9) = src_addr;
 		*(data + 17) = 0x01;
 		*(data + 18) = capability_info;
@@ -333,7 +333,7 @@ drv_assoc_req(struct ieee802154_local *local, u8 coord_channel,
 		*(data + 2) = 0;
 		*(data + 3) = coord_pan_id;
 		*(data + 5) = coord_addr;
-		*(data + 13) = 0xFFFE;
+		*(data + 13) = 0xFFFF;
 		*(data + 15) = src_addr;
 		*(data + 23) = 0x01;
 		*(data + 24) = capability_info;

@@ -273,7 +273,7 @@ ieee802154_set_lbt_mode(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 }
 
 static int
-ieee802154_set_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 							u8 coord_channel, u8 coord_page, u8 addr_mode,
 							__le16 coord_pan_id, __le64 coord_addr, u8 capability_info)
 {
@@ -318,6 +318,6 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_max_csma_backoffs = ieee802154_set_max_csma_backoffs,
 	.set_max_frame_retries = ieee802154_set_max_frame_retries,
 	.set_lbt_mode = ieee802154_set_lbt_mode,
-	.set_assoc_req = ieee802154_set_assoc_req,
+	.assoc_req = ieee802154_assoc_req,
 	.ed_scan = ieee802154_ed_scan,
 };
