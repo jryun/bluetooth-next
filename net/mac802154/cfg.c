@@ -282,8 +282,21 @@ ieee802154_set_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	ASSERT_RTNL();
 
-	drv_assoc_req( local, coord_channel,
-			coord_page, addr_mode, coord_pan_id, coord_addr, capability_info );
+	ret = drv_assoc_req( local, coord_channel,
+				coord_page, addr_mode, coord_pan_id, coord_addr, capability_info );
+	return ret;
+}
+
+static int
+ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+            u8 page, u32 channels, u8 *level, size_t nlevel, u8 duration)
+{
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	int ret = 0;
+
+	ASSERT_RTNL();
+
+	ret = drv_ed_scan( local, page, channels, level, nlevel, duration );
 
 	return ret;
 }
@@ -306,4 +319,5 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_max_frame_retries = ieee802154_set_max_frame_retries,
 	.set_lbt_mode = ieee802154_set_lbt_mode,
 	.set_assoc_req = ieee802154_set_assoc_req,
+	.ed_scan = ieee802154_ed_scan,
 };
