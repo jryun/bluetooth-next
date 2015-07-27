@@ -287,7 +287,7 @@ drv_set_promiscuous_mode(struct ieee802154_local *local, bool on)
 static inline int
 drv_assoc_req(struct ieee802154_local *local, u8 coord_channel,
 		u8 coord_page, u8 addr_mode, __le16 coord_pan_id,
-		__le64 coord_addr, __le64 src_addr, u8 capability_info )
+		__le64 coord_addr, u8 capability_info, __le64 src_addr )
 {
 	int ret;
 
