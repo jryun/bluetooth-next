@@ -1084,8 +1084,7 @@ static int nl802154_set_assoc_req(struct sk_buff *skb, struct genl_info *info)
 		!info->attrs[NL802154_ATTR_PAGE] ||
 		!info->attrs[NL802154_ATTR_ADDRESS_MODE] ||
 		!info->attrs[NL802154_ATTR_PAN_ID] ||
-		!info->attrs[NL802154_ATTR_CAPABILITY_INFO] ||
-		!info->attrs[NL802154_ATTR_EXTENDED_ADDR]
+		!info->attrs[NL802154_ATTR_CAPABILITY_INFO]
 		) return -EINVAL;
 
 	coord_channel = nla_get_u8(info->attrs[NL802154_ATTR_CHANNEL]);
