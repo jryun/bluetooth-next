@@ -283,7 +283,7 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	ASSERT_RTNL();
 
 	ret = drv_assoc_req( local, coord_channel,
-				coord_page, addr_mode, coord_pan_id, coord_addr, capability_info );
+			coord_page, addr_mode, coord_pan_id, coord_addr, capability_info, src_addr );
 	return ret;
 }
 

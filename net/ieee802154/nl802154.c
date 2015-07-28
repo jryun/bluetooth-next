@@ -511,7 +511,7 @@ static int nl802154_send_wpan_phy(struct cfg802154_registered_device *rdev,
 	CMD(set_max_csma_backoffs, SET_MAX_CSMA_BACKOFFS);
 	CMD(set_max_frame_retries, SET_MAX_FRAME_RETRIES);
 	CMD(set_lbt_mode, SET_LBT_MODE);
-	CMD(set_assoc_req, ASSOC_REQ);
+	CMD(assoc_req, ASSOC_REQ);
 	CMD(ed_scan, ED_SCAN_REQ);
 
 	if (rdev->wpan_phy.flags & WPAN_PHY_FLAG_TXPOWER)
@@ -1207,7 +1207,7 @@ out:
 	return r;
 }
 
-static int nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, __le16 short_addr, u8 status, struct ieee802154_command_info *command_info ){
+static int nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, struct ieee802154_command_info *command_info ){
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
@@ -1217,6 +1217,8 @@ static int nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, __le
     void *hdr;
 
 	int r = 0;
+	u8 status = *(skb->data + 3);
+	__le16 short_addr = *(skb->data + 1) << 8 | *(skb->data + 2);
 	__le16 pan_id = command_info->dest_pan_id;
 
 	//set pan id and short addr and shit
@@ -1257,7 +1259,12 @@ static int nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, __le
 
     r = genlmsg_reply( reply, info );
 
-	return 0;
+nla_put_failure:
+free_reply:
+   nlmsg_free( reply );
+out:
+
+    	return r;
 }
 
 static int nl802154_ed_scan_put_ed( struct sk_buff *reply, u8 result_list_size, u32 scan_channels, u8 *ed ) {
@@ -1461,18 +1468,12 @@ int nl802154_mac_cmd(struct sk_buff *skb, struct genl_info *info, struct ieee802
 
 	int r = 0;
 
-	u8 cmd_id = *(skb.data);
-
+	u8 cmd_id = *(skb->data);
 	switch (cmd_id){
 	case(0x02):
-		u8 status = *(skb.data + 3);
+		printk(KERN_INFO "association response frame is in");
+		r = nl802154_assoc_cnf( skb, info, command_info );
 
-	if (status == 0x00){
-		__le16 short_addr = *(skb.data + 1) << 8 | *(skb.data + 2);
-		r = nl802154_assoc_cnf( skb, info, short_addr, status, command_info );
-	}else {
-		printk(KERN_INFO "command status is not 00");
-	}
 		break;
 	default:
 		printk(KERN_INFO "command id is %i, and code for it isnt done.", cmd_id);

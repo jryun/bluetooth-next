@@ -336,9 +336,7 @@ drv_assoc_req(struct ieee802154_local *local, u8 coord_channel,
 		*(data + 24) = capability_info;
 	}
 
-	struct sk_buff *skb;
-
-	skb.data = *data;
+	skb->data = *data;
 	skb->len = len;
 
 	ret = drv_xmit_async(local, skb);
