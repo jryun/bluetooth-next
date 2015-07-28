@@ -292,13 +292,10 @@ drv_assoc_req(struct ieee802154_local *local, u8 coord_channel,
 	int ret;
 
 	//Coordinator channel and page is the same on this device.
-	//We want to communicate to the coordinator, so set to that channel
+	//We want to communicate to the coordinator, so set to that channel and pan id
 
-	ret = local->ops->set_channel( &local->hw, coord_page, coord_channel );
-	if ( 0 != ret ) {
-		printk( KERN_INFO "failed to set channel %d\n", i );
-		goto out;
-	}
+	drv_set_pan_id( local, coord_pan_id);
+	drv_set_channel( local, coord_page, coord_channel);
 
 	struct sk_buff *skb;
 	//[ FRAME CONTROL (2) ][ SEQ NUMBER (1) ][ DEST PAN ID (2) ][ DEST ADDRESS (0/2/8) ][ SRC PAN ID (2) ][ SRC ADDRESS (0) ][ SECURITY (0) ][ PAYLOAD ]

@@ -301,6 +301,32 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	return ret;
 }
 
+static int
+ieee802154_register_command_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, struct genl_info *info)
+{
+	int ret = 0;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	local->command_listener = info;
+	ret = drv_start( local );
+	return ret;
+}
+
+static int
+ieee802154_deregister_command_listener( struct wpan_phy *wpan_phy )
+{
+	int ret = 0;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	local->command_listener = NULL;
+	return ret;
+}
+
+int cfg802154_mac_cmd(struct sk_buff *skb, struct genl_info *info, struct ieee802154_command_info *command_info)
+{
+	int ret;
+	ret = nl802154_mac_cmd(skb, info, command_info);
+	return ret;
+}
+
 const struct cfg802154_ops mac802154_config_ops = {
 	.add_virtual_intf_deprecated = ieee802154_add_iface_deprecated,
 	.del_virtual_intf_deprecated = ieee802154_del_iface_deprecated,
@@ -320,4 +346,7 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_lbt_mode = ieee802154_set_lbt_mode,
 	.assoc_req = ieee802154_assoc_req,
 	.ed_scan = ieee802154_ed_scan,
+	.register_command_listener = ieee802154_register_command_listener,
+	.deregister_command_listener = ieee802154_deregister_command_listener,
 };
+

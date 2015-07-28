@@ -53,8 +53,6 @@ enum nl802154_commands {
 	NL802154_CMD_SET_LBT_MODE,
 
 	NL802154_CMD_ASSOC_REQ,
-	NL802154_CMD_ASSOC_IND,
-	NL802154_CMD_ASSOC_RESP,
 	NL802154_CMD_ASSOC_CNF,
 	NL802154_CMD_ED_SCAN_REQ,
 	NL802154_CMD_ED_SCAN_CNF,
@@ -266,5 +264,24 @@ enum nl802154_supported_bool_states {
 	__NL802154_SUPPORTED_BOOL_AFTER_LAST,
 	NL802154_SUPPORTED_BOOL_MAX = __NL802154_SUPPORTED_BOOL_AFTER_LAST - 1
 };
+
+struct ieee802154_command_info{
+	__le16 dest_pan_id;
+	u8 dest_addr_mode;
+	union{
+		__le16 dest_short_addr;
+		__le64 dest_ext_addr;
+	};
+	__le16 src_pan_id;
+	u8 src_addr_mode;
+	union{
+		__le16 src_short_addr;
+		__le64 src_ext_addr;
+	};
+};
+
+struct genl_info;
+
+int cfg802154_mac_cmd(struct sk_buff *skb, struct genl_info *info, struct ieee802154_command_info *command_info);
 
 #endif /* __NL802154_H */

@@ -23,6 +23,7 @@
 #include <linux/bug.h>
 
 #include <net/nl802154.h>
+#include <net/genetlink.h>
 
 struct wpan_phy;
 struct wpan_phy_cca;
@@ -68,6 +69,8 @@ struct cfg802154_ops {
 			u8 cap_info, __le64 src_addr );
 	int (*assoc_cnf)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 			__le16 assoc_short_addr, u8 status);
+	int (*register_command_listener)( struct wpan_dev *wpan_phy, struct wpan_dev *wpan_dev, struct genl_info *info );
+	int (*deregister_command_listener)( struct wpan_phy *wpan_phy );
 	int (*ed_scan)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	            u8 page, u32 scan_channels, u8 *level, size_t nlevel, u8 duration );
 };
@@ -234,5 +237,7 @@ static inline const char *wpan_phy_name(struct wpan_phy *phy)
 {
 	return dev_name(&phy->dev);
 }
+
+int nl802154_mac_cmd(struct sk_buff *skb, struct genl_info *info, struct ieee802154_command_info *command_info);
 
 #endif /* __NET_CFG802154_H */

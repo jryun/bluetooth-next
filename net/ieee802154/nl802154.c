@@ -14,6 +14,7 @@
  */
 
 #include <linux/rtnetlink.h>
+#include <linux/jiffies.h>
 
 #include <net/cfg802154.h>
 #include <net/genetlink.h>
@@ -1096,12 +1097,40 @@ static int nl802154_set_lbt_mode(struct sk_buff *skb, struct genl_info *info)
 	return rdev_set_lbt_mode(rdev, wpan_dev, mode);
 }
 
+static int nl802154_add_work( struct work802154 *wrk ) {
+    int r;
+	r = schedule_work( &wrk->work );
+	return r ? 0 : -EALREADY;
+}
+
+static void nl802154_confirm_work( struct work_struct *work ){
+	struct work802154 *wrk;
+	struct cfg802154_registered_device *rdev;
+	struct genl_info *info;
+
+	wrk = container_of( work, struct work802154, work );
+
+	info = wrk->info;
+
+	rdev = info->user_ptr[0];
+
+	msleep( 10000 );
+
+	rdev_confirm_deregister_listener( rdev );
+
+	complete( &wrk->completion );
+	kfree( wrk );
+	return;
+}
+
 static int nl802154_assoc_req(struct sk_buff *skb, struct genl_info *info)
 {
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
 	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+	struct work802154 *wrk;
 
+	int r = 0;
 	u8 coord_channel;
 	u8 coord_page;
 	enum nl802154_address_modes addr_mode;
@@ -1140,9 +1169,49 @@ static int nl802154_assoc_req(struct sk_buff *skb, struct genl_info *info)
 			coord_addr =(__force __le64)nla_get_u64(info->attrs[NL802154_ATTR_EXTENDED_ADDR]);
 		}
 	}
+	//send out the request radio message
+	r = rdev_assoc_req(rdev, wpan_dev, coord_channel, coord_page, addr_mode, coord_pan_id, coord_addr, capability_info, src_addr);
+	if ( 0 != r ) {
+		dev_err( dev, "nl802154_add_work failed (%d)\n", r );
+		goto free_wrk;
+	}
 
-	return rdev_assoc_req(rdev, wpan_dev, coord_channel, coord_page, addr_mode, coord_pan_id, coord_addr, capability_info, src_addr);
+	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+
+	if ( NULL == wrk ) {
+		r = -ENOMEM;
+		goto out;
+	}
+
+	wrk->info = info;
+
+	init_completion( &wrk->completion );
+	INIT_WORK( &wrk->work, nl802154_confirm_work );
+	//schedule_delayed_work( &wrk->work, msecs_to_jiffies(10000) );
+	r = nl802154_add_work( wrk );
+	if ( 0 != r ) {
+		dev_err( dev, "nl802154_add_work failed (%d)\n", r );
+		goto free_wrk;
+	}
+
+	r = rdev_confirm_register_listener(rdev, NULL, info);
+
+	wait_for_completion( &wrk->completion );
+
+	r = 0;
+	goto out;
+
+free_wrk:
+	kfree( wrk );
+out:
+	return r;
 }
+
+static int nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, u8 status, __le16 short_addr){
+
+	return 0;
+}
+
 static int nl802154_ed_scan_put_ed( struct sk_buff *reply, u8 result_list_size, u32 scan_channels, u8 *ed ) {
     int r;
 
@@ -1261,12 +1330,6 @@ out:
     return;
 }
 
-static int nl802154_add_work( struct work802154 *wrk ) {
-    int r;
-	r = schedule_work( &wrk->work );
-	return r ? 0 : -EALREADY;
-}
-
 static int nl802154_ed_scan_req( struct sk_buff *skb, struct genl_info *info )
 {
     int r;
@@ -1341,6 +1404,55 @@ free_wrk:
 
 out:
     return r;
+}
+
+int nl802154_mac_cmd(struct sk_buff *skb, struct genl_info *info, struct ieee802154_command_info *command_info )
+{
+
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
+
+	int r = 0;
+
+	u8 cmd_id = *(skb.data);
+
+	switch (cmd_id){
+	case(0x02):
+		u8 status = *(skb.data + 3);
+
+	if (status == 0x00){
+		__le16 short_addr = ((*(skb.data + 1) & 0xFF) << 8) | (*(skb.data + 2) & 0xFF)
+		r = nl802154_assoc_cnf( skb, info, status, short_addr);
+	}else {
+		printk(KERN_INFO "command status is not 00");
+	}
+		break;
+	default:
+		printk(KERN_INFO "command id is %i, and code for it isnt done.", cmd_id);
+		r = -1;
+	};
+
+	return r;
+}
+
+static void nl802154_confirm_work( struct work_struct *work ) {
+
+	struct work802154 *wrk;
+	struct cfg802154_registered_device *rdev;
+	struct genl_info *info;
+
+	wrk = container_of( work, struct work802154, work );
+
+	info = wrk->info;
+
+	rdev = info->user_ptr[0];
+
+	msleep( 10000 );
+
+	rdev_confirm_deregister_listener( rdev );
+
+	complete( &wrk->completion );
+	kfree( wrk );
+	return;
 }
 
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01
@@ -1552,14 +1664,6 @@ static const struct genl_ops nl802154_ops[] = {
 	{
 		.cmd = NL802154_CMD_ASSOC_REQ,
 		.doit = nl802154_assoc_req,
-		.policy = nl802154_policy,
-		.flags = GENL_ADMIN_PERM,
-		.internal_flags = NL802154_FLAG_NEED_NETDEV |
-				  NL802154_FLAG_NEED_RTNL,
-	},
-	{
-		.cmd = NL802154_CMD_ASSOC_CNF,
-		.doit = nl802154_assoc_cnf,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL802154_FLAG_NEED_NETDEV |

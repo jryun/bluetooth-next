@@ -29,12 +29,50 @@
 
 #include "ieee802154_i.h"
 
+struct workconfirmreceive{
+	struct ieee802154_command_info *command_info;
+	struct genl_info *command_listener;
+	struct sk_buff *skb;
+	struct work_struct work;
+};
+
 static int ieee802154_deliver_skb(struct sk_buff *skb)
 {
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
 	return netif_receive_skb(skb);
+}
+
+static void rx_receive_work( struct work_struct *work )
+{
+	struct workconfirmreceive *wrk;
+	wrk = container_of( work, struct workconfirmreceive, work);
+
+	cfg802154_mac_cmd( wrk->skb , wrk->command_listener ,wrk->command_info);
+}
+
+static int ieee802154_deliver_cmd(struct sk_buff *skb, const struct ieee802154_hdr *hdr){
+	int ret;
+	skb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb->protocol = htons(ETH_P_IEEE802154);
+
+	u8 src_addr_mode = hdr->source.mode;
+	__le16 src_pan_id = hdr->source.pan_id;
+	__le16 src_short_addr = hdr->source.short_addr;
+	__le64 src_ext_addr = hdr->source.extended_addr;
+
+	u8 dest_addr_mode = hdr->dest.mode;
+	__le16 dest_pan_id = hdr->dest.pan_id;
+	__le16 dest_short_addr = hdr->dest.short_addr;
+	__le64 dest_ext_addr = hdr->dest.extended_addr;
+
+	//send the header and data upstream
+
+
+out:
+
+	return ret;
 }
 
 static int
@@ -99,6 +137,13 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	switch (mac_cb(skb)->type) {
 	case IEEE802154_FC_TYPE_DATA:
 		return ieee802154_deliver_skb(skb);
+	case IEEE802154_FC_TYPE_MAC_CMD:
+		printk( KERN_INFO "command listener address: %x\n", sdata->local->command_listener );
+		if( sdata->local->command_listener){
+			printk( KERN_INFO "Received Command Frame");
+			return ieee802154_deliver_cmd(skb, hdr, sdata->local->command_listener);
+		}
+		break;
 	default:
 		pr_warn("ieee802154: bad frame received (type = %d)\n",
 			mac_cb(skb)->type);
