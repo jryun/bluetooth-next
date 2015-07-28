@@ -221,22 +221,22 @@ rdev_ed_scan(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev
 
 
 static inline int
-rdev_command_register_listener(struct cfg802154_registered_device *rdev,
+rdev_assoc_register_listener(struct cfg802154_registered_device *rdev,
 		  struct wpan_dev *wpan_dev, struct genl_info *info )
 {
 	int ret = 0;
 
-	ret = rdev->ops->register_command_listener(&rdev->wpan_phy, wpan_dev, info );
+	ret = rdev->ops->register_assoc_listener(&rdev->wpan_phy, wpan_dev, info );
 
 	return ret;
 }
 
 static inline int
-rdev_command_deregister_listener(struct cfg802154_registered_device *rdev )
+rdev_assoc_deregister_listener(struct cfg802154_registered_device *rdev )
 {
 	int ret = 0;
 
-	ret = rdev->ops->deregister_command_listener(&rdev->wpan_phy );
+	ret = rdev->ops->deregister_assoc_listener(&rdev->wpan_phy );
 
 	return ret;
 }

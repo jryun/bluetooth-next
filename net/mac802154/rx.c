@@ -23,15 +23,16 @@
 #include <linux/crc-ccitt.h>
 #include <asm/unaligned.h>
 
+#include <linux/ieee802154.h>
 #include <net/mac802154.h>
 #include <net/ieee802154_netdev.h>
 #include <net/nl802154.h>
 
 #include "ieee802154_i.h"
 
-struct workconfirmreceive{
-	struct ieee802154_command_info *command_info;
-	struct genl_info *command_listener;
+struct workassocreceive{
+	struct ieee802154_command_info *hdr_info;
+	struct genl_info *assoc_listener;
 	struct sk_buff *skb;
 	struct work_struct work;
 };
@@ -46,29 +47,47 @@ static int ieee802154_deliver_skb(struct sk_buff *skb)
 
 static void rx_receive_work( struct work_struct *work )
 {
-	struct workconfirmreceive *wrk;
-	wrk = container_of( work, struct workconfirmreceive, work);
+	struct workassocreceive *wrk;
+	wrk = container_of( work, struct workassocreceive, work);
 
-	cfg802154_mac_cmd( wrk->skb , wrk->command_listener ,wrk->command_info);
+	cfg802154_mac_cmd( wrk->skb, wrk->assoc_listener, wrk->hdr_info);
+
+	kfree( wrk );
+	return;
 }
 
-static int ieee802154_deliver_cmd(struct sk_buff *skb, const struct ieee802154_hdr *hdr){
+static int ieee802154_deliver_cmd(struct sk_buff *skb, const struct ieee802154_hdr *hdr, struct genl_info *info){
 	int ret;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->protocol = htons(ETH_P_IEEE802154);
+	struct workassocreceive *wrk;
 
-	u8 src_addr_mode = hdr->source.mode;
-	__le16 src_pan_id = hdr->source.pan_id;
-	__le16 src_short_addr = hdr->source.short_addr;
-	__le64 src_ext_addr = hdr->source.extended_addr;
+	struct ieee802154_command_info *command_info;
 
-	u8 dest_addr_mode = hdr->dest.mode;
-	__le16 dest_pan_id = hdr->dest.pan_id;
-	__le16 dest_short_addr = hdr->dest.short_addr;
-	__le64 dest_ext_addr = hdr->dest.extended_addr;
+	command_info->src_addr_mode = hdr->source.mode;
+	command_info->src_pan_id = hdr->source.pan_id;
+	if ( 0x02 == command_info->src_addr_mode ){
+		command_info->src_short_addr = hdr->source.short_addr;
+	}else {
+		command_info->src_ext_addr = hdr->source.extended_addr;
+	}
+
+	command_info->dest_addr_mode = hdr->dest.mode;
+	command_info->dest_pan_id = hdr->dest.pan_id;
+	if ( 0x02 == command_info->dest_addr_mode ){
+		command_info->dest_short_addr = hdr->dest.short_addr;
+	}else {
+		command_info->dest_ext_addr = hdr->dest.extended_addr;
+	}
 
 	//send the header and data upstream
+	wrk->hdr_info = command_info;
+	wrk->assoc_listener = info;
+	wrk->skb = skb;
 
+	INIT_WORK( &wrk->work, rx_receive_work );
+
+	ret = schedule_work( &wrk->work );
 
 out:
 
@@ -138,10 +157,11 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	case IEEE802154_FC_TYPE_DATA:
 		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_MAC_CMD:
-		printk( KERN_INFO "command listener address: %x\n", sdata->local->command_listener );
-		if( sdata->local->command_listener){
-			printk( KERN_INFO "Received Command Frame");
-			return ieee802154_deliver_cmd(skb, hdr, sdata->local->command_listener);
+		if (IEEE802154_CMD_ASSOCIATION_RESP == *(skb->data)){
+			if( sdata->local->assoc_listener){
+				printk( KERN_INFO "Received association response frame");
+				return ieee802154_deliver_cmd(skb, hdr, sdata->local->assoc_listener);
+			}
 		}
 		break;
 	default:

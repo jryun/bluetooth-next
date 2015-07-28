@@ -266,6 +266,7 @@ enum nl802154_supported_bool_states {
 };
 
 struct ieee802154_command_info{
+	u8 command_id;
 	__le16 dest_pan_id;
 	u8 dest_addr_mode;
 	union{
@@ -282,6 +283,6 @@ struct ieee802154_command_info{
 
 struct genl_info;
 
-int cfg802154_mac_cmd(struct sk_buff *skb, struct genl_info *info, struct ieee802154_command_info *command_info);
+int cfg802154_mac_cmd(struct sk_buff *skb, struct genl_info *info, struct ieee802154_command_info *hdr_info);
 
 #endif /* __NL802154_H */

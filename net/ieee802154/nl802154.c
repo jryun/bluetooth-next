@@ -1116,7 +1116,7 @@ static void nl802154_confirm_work( struct work_struct *work ){
 
 	msleep( 10000 );
 
-	rdev_confirm_deregister_listener( rdev );
+	rdev_assoc_deregister_listener( rdev );
 
 	complete( &wrk->completion );
 	kfree( wrk );
@@ -1194,7 +1194,7 @@ static int nl802154_assoc_req(struct sk_buff *skb, struct genl_info *info)
 		goto free_wrk;
 	}
 
-	r = rdev_confirm_register_listener(rdev, NULL, info);
+	r = rdev_assoc_register_listener(rdev, NULL, info);
 
 	wait_for_completion( &wrk->completion );
 
@@ -1207,7 +1207,53 @@ out:
 	return r;
 }
 
-static int nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, u8 status, __le16 short_addr){
+static int nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, __le16 short_addr, struct ieee802154_command_info *command_info ){
+
+	struct cfg802154_registered_device *rdev = info->user_ptr[0];
+	struct net_device *dev = info->user_ptr[1];
+	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+
+	struct sk_buff *reply;
+    void *hdr;
+
+	int r = 0;
+	__le16 pan_id = command_info->dest_pan_id;
+
+	//set pan id and short addr and shit
+	r = rdev_set_pan_id(rdev, wpan_dev, pan_id);
+	if ( 0 != r){
+        dev_err( dev, "set pan id failed (%d)\n", r );
+		return r;
+	}
+	r = rdev_set_short_addr(rdev, wpan_dev, short_addr);
+	if ( 0 != r){
+        dev_err( dev, "set short addr failed (%d)\n", r );
+		return r;
+	}
+
+    reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+    if ( NULL == reply ) {
+        r = -ENOMEM;
+        dev_err( dev, "nlmsg_new failed (%d)\n", r );
+        goto out;
+    }
+
+    hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ASSOC_CNF );
+    if ( NULL == hdr ) {
+        r = -ENOBUFS;
+        goto free_reply;
+    }
+
+    r =	nla_put_le16( reply, NL802154_ATTR_SHORT_ADDR, short_addr ) ||
+		nla_put_le16( reply, NL802154_ATTR_PAN_ID, pan_id );
+    if ( 0 != r ) {
+        dev_err( dev, "nla_put_failure (%d)\n", r );
+        goto nla_put_failure;
+    }
+
+    genlmsg_end( reply, hdr );
+
+    r = genlmsg_reply( reply, info );
 
 	return 0;
 }
@@ -1420,8 +1466,8 @@ int nl802154_mac_cmd(struct sk_buff *skb, struct genl_info *info, struct ieee802
 		u8 status = *(skb.data + 3);
 
 	if (status == 0x00){
-		__le16 short_addr = ((*(skb.data + 1) & 0xFF) << 8) | (*(skb.data + 2) & 0xFF)
-		r = nl802154_assoc_cnf( skb, info, status, short_addr);
+		__le16 short_addr = *(skb.data + 1) << 8 | *(skb.data + 2);
+		r = nl802154_assoc_cnf( skb, info, short_addr, command_info );
 	}else {
 		printk(KERN_INFO "command status is not 00");
 	}
@@ -1432,27 +1478,6 @@ int nl802154_mac_cmd(struct sk_buff *skb, struct genl_info *info, struct ieee802
 	};
 
 	return r;
-}
-
-static void nl802154_confirm_work( struct work_struct *work ) {
-
-	struct work802154 *wrk;
-	struct cfg802154_registered_device *rdev;
-	struct genl_info *info;
-
-	wrk = container_of( work, struct work802154, work );
-
-	info = wrk->info;
-
-	rdev = info->user_ptr[0];
-
-	msleep( 10000 );
-
-	rdev_confirm_deregister_listener( rdev );
-
-	complete( &wrk->completion );
-	kfree( wrk );
-	return;
 }
 
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01

@@ -302,21 +302,21 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 }
 
 static int
-ieee802154_register_command_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, struct genl_info *info)
+ieee802154_register_assoc_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, struct genl_info *info)
 {
 	int ret = 0;
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
-	local->command_listener = info;
+	local->assoc_listener = info;
 	ret = drv_start( local );
 	return ret;
 }
 
 static int
-ieee802154_deregister_command_listener( struct wpan_phy *wpan_phy )
+ieee802154_deregister_assoc_listener( struct wpan_phy *wpan_phy )
 {
 	int ret = 0;
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
-	local->command_listener = NULL;
+	local->assoc_listener = NULL;
 	return ret;
 }
 
@@ -346,7 +346,7 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_lbt_mode = ieee802154_set_lbt_mode,
 	.assoc_req = ieee802154_assoc_req,
 	.ed_scan = ieee802154_ed_scan,
-	.register_command_listener = ieee802154_register_command_listener,
-	.deregister_command_listener = ieee802154_deregister_command_listener,
+	.register_assoc_listener = ieee802154_register_assoc_listener,
+	.deregister_assoc_listener = ieee802154_deregister_assoc_listener,
 };
 

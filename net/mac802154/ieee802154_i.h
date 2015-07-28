@@ -57,7 +57,8 @@ struct ieee802154_local {
 
 	bool started;
 	bool suspended;
-	struct genl_info *command_listener;
+	struct genl_info *beacon_listener;
+	struct genl_info *assoc_listener;
 
 	struct tasklet_struct tasklet;
 	struct sk_buff_head skb_queue;
