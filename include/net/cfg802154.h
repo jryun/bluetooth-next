@@ -69,8 +69,8 @@ struct cfg802154_ops {
 			u8 cap_info, __le64 src_addr );
 	int (*assoc_cnf)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 			__le16 assoc_short_addr, u8 status);
-	int (*register_associate_listener)( struct wpan_dev *wpan_phy, struct wpan_dev *wpan_dev, struct genl_info *info );
-	int (*deregister_associate_listener)( struct wpan_phy *wpan_phy );
+	int (*register_assoc_listener)( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, struct genl_info *info );
+	int (*deregister_assoc_listener)( struct wpan_phy *wpan_phy );
 	int (*ed_scan)(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	            u8 page, u32 scan_channels, u8 *level, size_t nlevel, u8 duration );
 };

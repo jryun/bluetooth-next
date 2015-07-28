@@ -275,7 +275,7 @@ ieee802154_set_lbt_mode(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 static int
 ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 							u8 coord_channel, u8 coord_page, u8 addr_mode,
-							__le16 coord_pan_id, __le64 coord_addr, u8 capability_info)
+							__le16 coord_pan_id, __le64 coord_addr, u8 capability_info, __le64 src_addr)
 {
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
 	int ret = 0;
@@ -283,7 +283,7 @@ ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	ASSERT_RTNL();
 
 	ret = drv_assoc_req( local, coord_channel,
-				coord_page, addr_mode, coord_pan_id, coord_addr, capability_info );
+				coord_page, addr_mode, coord_pan_id, coord_addr, capability_info, src_addr );
 	return ret;
 }
 
