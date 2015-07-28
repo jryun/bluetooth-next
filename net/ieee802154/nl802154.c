@@ -1207,7 +1207,7 @@ out:
 	return r;
 }
 
-static int nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, __le16 short_addr, struct ieee802154_command_info *command_info ){
+static int nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, __le16 short_addr, u8 status, struct ieee802154_command_info *command_info ){
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
@@ -1245,7 +1245,9 @@ static int nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, __le
     }
 
     r =	nla_put_le16( reply, NL802154_ATTR_SHORT_ADDR, short_addr ) ||
-		nla_put_le16( reply, NL802154_ATTR_PAN_ID, pan_id );
+		nla_put_le16( reply, NL802154_ATTR_PAN_ID, pan_id ) ||
+		nla_put_u8( reply, NL802154_ATTR_CONFIRM_STATUS, pan_id );
+
     if ( 0 != r ) {
         dev_err( dev, "nla_put_failure (%d)\n", r );
         goto nla_put_failure;
@@ -1467,7 +1469,7 @@ int nl802154_mac_cmd(struct sk_buff *skb, struct genl_info *info, struct ieee802
 
 	if (status == 0x00){
 		__le16 short_addr = *(skb.data + 1) << 8 | *(skb.data + 2);
-		r = nl802154_assoc_cnf( skb, info, short_addr, command_info );
+		r = nl802154_assoc_cnf( skb, info, short_addr, status, command_info );
 	}else {
 		printk(KERN_INFO "command status is not 00");
 	}
