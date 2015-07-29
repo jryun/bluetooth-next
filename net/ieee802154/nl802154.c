@@ -1108,6 +1108,7 @@ static void nl802154_confirm_work( struct work_struct *work ){
 	struct cfg802154_registered_device *rdev;
 	struct genl_info *info;
 
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	wrk = container_of( work, struct work802154, work );
 
 	info = wrk->info;
@@ -1127,9 +1128,9 @@ static int nl802154_assoc_req(struct sk_buff *skb, struct genl_info *info)
 {
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
-	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+	struct wpan_dev *wpan_dev = &rdev->wpan_phy.dev;
 	struct work802154 *wrk;
-
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	int r = 0;
 	u8 coord_channel;
 	u8 coord_page;
@@ -1139,9 +1140,12 @@ static int nl802154_assoc_req(struct sk_buff *skb, struct genl_info *info)
 	__le64 src_addr = wpan_dev->extended_addr;
 	u8 capability_info;
 
-	/* conflict here while tx/rx calls */
-	if (netif_running(dev))
-		return -EBUSY;
+	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
+	printk(KERN_INFO "net_device dev address is %x" , dev);
+	printk(KERN_INFO "registered_device rdev address is %x" , rdev);
+	printk(KERN_INFO "wpan_dev wpan_dev address is %x" , wpan_dev);
+
+	// conflict here while tx/rx calls
 
 	if (!info->attrs[NL802154_ATTR_CHANNEL] ||
 		!info->attrs[NL802154_ATTR_PAGE] ||
@@ -1169,14 +1173,14 @@ static int nl802154_assoc_req(struct sk_buff *skb, struct genl_info *info)
 			coord_addr =(__force __le64)nla_get_u64(info->attrs[NL802154_ATTR_EXTENDED_ADDR]);
 		}
 	}
+	printk(KERN_INFO "Before send");
 	//send out the request radio message
 	r = rdev_assoc_req(rdev, wpan_dev, coord_channel, coord_page, addr_mode, coord_pan_id, coord_addr, capability_info, src_addr);
+	printk(KERN_INFO "After send");
 	if ( 0 != r ) {
-		dev_err( dev, "nl802154_add_work failed (%d)\n", r );
+		dev_err( dev, "rdev_assoc_req failed (%d)\n", r );
 		goto free_wrk;
 	}
-
-	wrk = kzalloc( sizeof( *wrk ), GFP_KERNEL );
 
 	if ( NULL == wrk ) {
 		r = -ENOMEM;
@@ -1694,7 +1698,7 @@ static const struct genl_ops nl802154_ops[] = {
 		.doit = nl802154_assoc_req,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
-		.internal_flags = NL802154_FLAG_NEED_NETDEV |
+		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
 				  NL802154_FLAG_NEED_RTNL,
 	},
 	{
