@@ -273,18 +273,144 @@ ieee802154_set_lbt_mode(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 }
 
 static int
+ieee802154_header_create( struct sk_buff *skb,
+								struct wpan_dev *wpan_dev,
+								unsigned short type,
+								const void *daddr,
+								const void *saddr,
+								unsigned len)
+{
+	struct ieee802154_hdr hdr;
+	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
+	struct ieee802154_mac_cb *cb = mac_cb(skb);
+	int hlen;
+
+	if (!daddr)
+		return -EINVAL;
+
+	memset(&hdr.fc, 0, sizeof(hdr.fc));
+	hdr.fc.type = cb->type;
+	hdr.fc.security_enabled = cb->secen;
+	hdr.fc.ack_request = cb->ackreq;
+	hdr.seq = atomic_inc_return(&wpan_dev->dsn) & 0xFF;
+
+	if (mac802154_set_header_security(sdata, &hdr, cb) < 0)
+		return -EINVAL;
+
+	if (!saddr) {
+		if (wpan_dev->short_addr == cpu_to_le16(IEEE802154_ADDR_BROADCAST) ||
+		    wpan_dev->short_addr == cpu_to_le16(IEEE802154_ADDR_UNDEF) ||
+		    wpan_dev->pan_id == cpu_to_le16(IEEE802154_PANID_BROADCAST)) {
+			hdr.source.mode = IEEE802154_ADDR_LONG;
+			hdr.source.extended_addr = wpan_dev->extended_addr;
+		} else {
+			hdr.source.mode = IEEE802154_ADDR_SHORT;
+			hdr.source.short_addr = wpan_dev->short_addr;
+		}
+
+		hdr.source.pan_id = wpan_dev->pan_id;
+	} else {
+		hdr.source = *(const struct ieee802154_addr *)saddr;
+	}
+
+	hdr.dest = *(const struct ieee802154_addr *)daddr;
+
+	hlen = ieee802154_hdr_push(skb, &hdr);
+	if (hlen < 0)
+		return -EINVAL;
+
+	skb_reset_mac_header(skb);
+	skb->mac_len = hlen;
+
+	if (len > ieee802154_max_payload(&hdr))
+		return -EMSGSIZE;
+
+	return hlen;
+}
+
+static int
 ieee802154_assoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 							u8 coord_channel, u8 coord_page, u8 addr_mode,
 							__le16 coord_pan_id, __le64 coord_addr, u8 capability_info, __le64 src_addr)
 {
-	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
-	int ret = 0;
+	int r = 0;
+	struct sk_buff *skb;
+	struct ieee802154_mac_cb *cb;
+	int hlen, tlen, size;
+	struct ieee802154_addr dst_addr, source_addr;
+	unsigned char *data;
 
-	ASSERT_RTNL();
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 
-	ret = drv_assoc_req( local, coord_channel,
-				coord_page, addr_mode, coord_pan_id, coord_addr, capability_info, src_addr );
-	return ret;
+	struct ieee802154_local * local = wpan_phy_priv(wpan_phy);
+
+	//Create assoc_req frame / payload
+	hlen = LL_RESERVED_SPACE(wpan_dev->netdev);
+	tlen = wpan_dev->netdev->needed_tailroom;
+	size = 2; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
+
+	printk( KERN_INFO "The skb lengths used are hlen: %d, tlen %d, and size %d\n", hlen, tlen, size);
+	printk( KERN_INFO "Address of the netdev device structure: %x\n", wpan_dev->netdev );
+	printk( KERN_INFO "Address of ieee802154_local * local from wpan_phy_priv: %x\n", local );
+
+	//Subvert and populate the ieee802154_local pointer in ieee802154_sub_if_data
+	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(wpan_dev->netdev);
+	sdata->local = local;
+
+	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
+	if (!skb){
+		goto error;
+	}
+
+	skb_reserve(skb, hlen);
+
+	skb_reset_network_header(skb);
+
+	data = skb_put(skb, size);
+
+	source_addr.mode = IEEE802154_ADDR_LONG;
+	source_addr.pan_id = IEEE802154_PANID_BROADCAST;
+	source_addr.extended_addr = src_addr;
+	dst_addr.mode = addr_mode;
+	dst_addr.pan_id = IEEE802154_PANID_BROADCAST;
+	if (IEEE802154_ADDR_SHORT == addr_mode) {
+		dst_addr.short_addr = (__le16*) coord_addr;
+	} else {
+		dst_addr.extended_addr = coord_addr;
+	}
+
+	cb = mac_cb_init(skb);
+	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
+	cb->ackreq = false;
+
+	cb->secen = false;
+	cb->secen_override = false;
+	cb->seclevel = 0;
+
+	cb->source = source_addr;
+	cb->dest = dst_addr;
+
+	printk( KERN_INFO "DSN value in wpan_dev: %x\n", &wpan_dev->dsn );
+	//Since the existing subroutine for creating the mac header doesn't seem to work in this situation, will be rewriting it it with a correction here
+	r = ieee802154_header_create( skb, wpan_dev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size);
+
+	//Add the mac header to the data
+	r = memcpy( data, cb, size );
+
+	skb->dev = wpan_dev->netdev;
+	skb->protocol = htons(ETH_P_IEEE802154);
+
+//	r = drv_xmit_async( local, skb );
+	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
+	if( 0 == r) {
+		goto out;
+	}
+
+
+error:
+	kfree_skb(skb);
+out:
+	return r;
 }
 
 static int
