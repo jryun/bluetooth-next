@@ -27,18 +27,6 @@
 #include "rdev-ops.h"
 #include "core.h"
 
-/**
- * enum nl802154_address_modes - address modes for 802.15.4
- *
- * @NL802154_ADDR_NO_ADDR: indicated there is no address
- * @NL802154_ADDR_LONG: indicates address is long type
- * @NL802154_ADDR_SHORT: indicates address is short type
- */
-enum nl802154_address_modes {
-	NL802154_ADDR_NO_ADDR = 0x00,
-	NL802154_ADDR_SHORT = 0x02,
-	NL802154_ADDR_LONG = 0x03,
-};
 struct work802154 {
     struct sk_buff *skb;
     struct genl_info *info; // user_ptr[0] = rdev, user_ptr[1] = wpan_dev
@@ -1164,7 +1152,7 @@ static int nl802154_assoc_req(struct sk_buff *skb, struct genl_info *info)
 	coord_pan_id = nla_get_le16(info->attrs[NL802154_ATTR_PAN_ID]);
 	capability_info = nla_get_le16(info->attrs[NL802154_ATTR_CAPABILITY_INFO]);
 
-	if ( NL802154_ADDR_SHORT == addr_mode ){
+	if ( IEEE802154_ADDR_SHORT == addr_mode ){
 		if ( !info->attrs[NL802154_ATTR_SHORT_ADDR] ){
 			return -EINVAL;
 		} else {

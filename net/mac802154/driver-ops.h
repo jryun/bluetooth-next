@@ -285,66 +285,6 @@ drv_set_promiscuous_mode(struct ieee802154_local *local, bool on)
 }
 
 static inline int
-drv_assoc_req(struct ieee802154_local *local, u8 coord_channel,
-		u8 coord_page, u8 addr_mode, __le16 coord_pan_id,
-		__le64 coord_addr, u8 capability_info, __le64 src_addr )
-{
-	int ret;
-
-	//Coordinator channel and page is the same on this device.
-	//We want to communicate to the coordinator, so set to that channel
-	drv_set_channel( local, coord_page, coord_channel);
-	drv_start( local );
-
-	struct sk_buff *skb;
-	//[ FRAME CONTROL (2) ][ SEQ NUMBER (1) ][ DEST PAN ID (2) ][ DEST ADDRESS (0/2/8) ][ SRC PAN ID (2) ][ SRC ADDRESS (0) ][ SECURITY (0) ][ PAYLOAD ]
-	//[				MAC HEADER				][ COMMAND FRAME ID (1) ][ CAPABILITY INFORMATION (1) ]
-	//determine where to send to (coordinator address)
-	//pack socket buffer
-	int len;
-
-	len = sizeof(u16) + sizeof(u8) + sizeof(u16) + sizeof(u16) + sizeof(__le64) + sizeof(u8)  + sizeof(u8) ;
-	len += (addr_mode == 0x02) ? sizeof(u16) : sizeof(__le64);
-
-	u8 * data = kzalloc(len, GFP_KERNEL);
-	skb = alloc_skb(len + sizeof(int), GFP_KERNEL);
-	u16 fcf = 0;
-
-	fcf |= 0b011;
-	fcf |= (addr_mode == 0x02) ? (0b10 << 10) : (0b11 << 10);
-	fcf |= 0x01 << 12;
-	fcf |= 0b11 << 14;
-
-	if (addr_mode == 0x02) {
-		*(data) = fcf;
-		*(data + 2) = 0;
-		*(data + 3) = coord_pan_id;
-		*(data + 5) = (__le16*) coord_addr;
-		*(data + 7) = 0xFFFF;
-		*(data + 9) = src_addr;
-		*(data + 17) = 0x01;
-		*(data + 18) = capability_info;
-	} else {
-		*(data) = fcf;
-		*(data + 2) = 0;
-		*(data + 3) = coord_pan_id;
-		*(data + 5) = coord_addr;
-		*(data + 13) = 0xFFFF;
-		*(data + 15) = src_addr;
-		*(data + 23) = 0x01;
-		*(data + 24) = capability_info;
-	}
-
-	skb->data = *data;
-	skb->len = len;
-
-	ret = drv_xmit_async(local, skb);
-
-	out:
-	return ret;
-}
-
-static inline int
 drv_ed_scan(struct ieee802154_local *local, u8 page, u32 channels, u8 *level, size_t nlevel, u8 duration)
 {
 	int ret;
