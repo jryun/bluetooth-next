@@ -65,7 +65,7 @@ static int nl802154_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 static void nl802154_post_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			       struct genl_info *info);
 
-static void nl802154_rx_time_out( struct work_struct *work );
+static void nl802154_rx_time_out( struct genl_info *info );
 
 /* the netlink family */
 static struct genl_family nl802154_fam = {
@@ -1261,7 +1261,6 @@ static int nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, stru
         goto free_reply;
     }
 
-puts:
     r =	nla_put_le16( reply, NL802154_ATTR_SHORT_ADDR, short_addr ) ||
 		nla_put_le16( reply, NL802154_ATTR_PAN_ID, pan_id ) ||
 		nla_put_u8( reply, NL802154_ATTR_CONFIRM_STATUS, status );
