@@ -65,6 +65,8 @@ static int nl802154_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 static void nl802154_post_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			       struct genl_info *info);
 
+static void nl802154_rx_time_out( struct work_struct *work );
+
 /* the netlink family */
 static struct genl_family nl802154_fam = {
 	.id = GENL_ID_GENERATE,		/* don't bother with a hardcoded ID */
@@ -1116,11 +1118,13 @@ static void nl802154_confirm_work( struct work_struct *work ){
 	rdev = info->user_ptr[0];
 
 	msleep( 10000 );
-
 	rdev_assoc_deregister_listener( rdev );
 
+
+	nl802154_rx_time_out( info );
 	complete( &wrk->completion );
 	kfree( wrk );
+	printk("timed out, deregistered listener, and free'd the work");
 	return;
 }
 
@@ -1175,7 +1179,7 @@ static int nl802154_assoc_req(struct sk_buff *skb, struct genl_info *info)
 	}
 	printk(KERN_INFO "Before send");
 	//send out the request radio message
-	r = rdev_assoc_req(rdev, wpan_dev, coord_channel, coord_page, addr_mode, coord_pan_id, coord_addr, capability_info, src_addr);
+	//r = rdev_assoc_req(rdev, wpan_dev, coord_channel, coord_page, addr_mode, coord_pan_id, coord_addr, capability_info, src_addr);
 	printk(KERN_INFO "After send");
 	if ( 0 != r ) {
 		dev_err( dev, "rdev_assoc_req failed (%d)\n", r );
@@ -1199,9 +1203,12 @@ static int nl802154_assoc_req(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	r = rdev_assoc_register_listener(rdev, NULL, info);
-
+	if ( 0 != r ) {
+		dev_err( dev, "rdev_assoc_register_listener failed (%d)\n", r );
+		goto free_wrk;
+	}
 	wait_for_completion( &wrk->completion );
-
+	printk("completed the time out waiter");
 	r = 0;
 	goto out;
 
@@ -1213,12 +1220,16 @@ out:
 
 static int nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, struct ieee802154_command_info *command_info ){
 
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
 	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
 
 	struct sk_buff *reply;
     void *hdr;
+
+    rdev_assoc_deregister_listener( rdev );
+    printk("LISTENER IS DEREGISTERED IN ASSOC_CNF");
 
 	int r = 0;
 	u8 status = *(skb->data + 3);
@@ -1250,9 +1261,10 @@ static int nl802154_assoc_cnf( struct sk_buff *skb, struct genl_info *info, stru
         goto free_reply;
     }
 
+puts:
     r =	nla_put_le16( reply, NL802154_ATTR_SHORT_ADDR, short_addr ) ||
 		nla_put_le16( reply, NL802154_ATTR_PAN_ID, pan_id ) ||
-		nla_put_u8( reply, NL802154_ATTR_CONFIRM_STATUS, pan_id );
+		nla_put_u8( reply, NL802154_ATTR_CONFIRM_STATUS, status );
 
     if ( 0 != r ) {
         dev_err( dev, "nla_put_failure (%d)\n", r );
@@ -1485,6 +1497,53 @@ int nl802154_mac_cmd(struct sk_buff *skb, struct genl_info *info, struct ieee802
 	};
 
 	return r;
+}
+
+static void nl802154_rx_time_out( struct genl_info *info ){
+	int r;
+	struct cfg802154_registered_device *rdev;
+	struct device *dev;
+
+	struct sk_buff *reply;
+	void *hdr;
+
+	rdev = info->user_ptr[0];
+	dev = &rdev->wpan_phy.dev;
+
+	reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
+	if ( NULL == reply ) {
+		r = -ENOMEM;
+		dev_err( dev, "nlmsg_new failed (%d)\n", r );
+		goto out;
+	}
+
+	hdr = nl802154hdr_put( reply, info->snd_portid, info->snd_seq, 0, NL802154_CMD_ASSOC_CNF );
+	if ( NULL == hdr ) {
+		r = -ENOBUFS;
+		goto free_reply;
+	}
+
+	__le16 short_addr = 0xFFFF;
+	__le16 pan_id = 0xFFFF;
+	u8 confirm_status = IEEE802154_NO_ACK;
+
+	r =	nla_put_le16( reply, NL802154_ATTR_SHORT_ADDR, short_addr ) ||
+		nla_put_le16( reply, NL802154_ATTR_PAN_ID, pan_id ) ||
+		nla_put_u8( reply, NL802154_ATTR_CONFIRM_STATUS, confirm_status );
+	if ( 0 != r ) {
+		dev_err( dev, "nla_put_failure (%d)\n", r );
+		goto nla_put_failure;
+	}
+	genlmsg_end( reply, hdr );
+
+	r = genlmsg_reply( reply, info );
+	goto out;
+
+	nla_put_failure:
+	free_reply:
+	nlmsg_free( reply );
+	out:
+	return;
 }
 
 #define NL802154_FLAG_NEED_WPAN_PHY	0x01

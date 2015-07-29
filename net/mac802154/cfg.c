@@ -304,6 +304,7 @@ ieee802154_ed_scan(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 static int
 ieee802154_register_assoc_listener(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, struct genl_info *info)
 {
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	int ret = 0;
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
 	local->assoc_listener = info;
@@ -314,6 +315,7 @@ ieee802154_register_assoc_listener(struct wpan_phy *wpan_phy, struct wpan_dev *w
 static int
 ieee802154_deregister_assoc_listener( struct wpan_phy *wpan_phy )
 {
+	printk(KERN_INFO "Inside %s\n", __FUNCTION__);
 	int ret = 0;
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
 	local->assoc_listener = NULL;
