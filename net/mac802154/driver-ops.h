@@ -292,10 +292,9 @@ drv_assoc_req(struct ieee802154_local *local, u8 coord_channel,
 	int ret;
 
 	//Coordinator channel and page is the same on this device.
-	//We want to communicate to the coordinator, so set to that channel and pan id
-
-	drv_set_pan_id( local, coord_pan_id);
+	//We want to communicate to the coordinator, so set to that channel
 	drv_set_channel( local, coord_page, coord_channel);
+	drv_start( local );
 
 	struct sk_buff *skb;
 	//[ FRAME CONTROL (2) ][ SEQ NUMBER (1) ][ DEST PAN ID (2) ][ DEST ADDRESS (0/2/8) ][ SRC PAN ID (2) ][ SRC ADDRESS (0) ][ SECURITY (0) ][ PAYLOAD ]
@@ -308,8 +307,8 @@ drv_assoc_req(struct ieee802154_local *local, u8 coord_channel,
 	len += (addr_mode == 0x02) ? sizeof(u16) : sizeof(__le64);
 
 	u8 * data = kzalloc(len, GFP_KERNEL);
-
-	u16 fcf;
+	skb = alloc_skb(len + sizeof(int), GFP_KERNEL);
+	u16 fcf = 0;
 
 	fcf |= 0b011;
 	fcf |= (addr_mode == 0x02) ? (0b10 << 10) : (0b11 << 10);
