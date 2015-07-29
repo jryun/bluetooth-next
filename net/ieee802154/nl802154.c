@@ -1126,7 +1126,7 @@ static int nl802154_assoc_req(struct sk_buff *skb, struct genl_info *info)
 	int r = 0;
 	u8 coord_channel;
 	u8 coord_page;
-	enum nl802154_address_modes addr_mode;
+	u8 addr_mode;
 	__le16 coord_pan_id;
 	__le64 coord_addr;
 	__le64 src_addr = wpan_dev->extended_addr;
@@ -1167,7 +1167,7 @@ static int nl802154_assoc_req(struct sk_buff *skb, struct genl_info *info)
 	}
 	printk(KERN_INFO "Before send");
 	//send out the request radio message
-	//r = rdev_assoc_req(rdev, wpan_dev, coord_channel, coord_page, addr_mode, coord_pan_id, coord_addr, capability_info, src_addr);
+	r = rdev_assoc_req(rdev, wpan_dev, coord_channel, coord_page, addr_mode, coord_pan_id, coord_addr, capability_info, src_addr);
 	printk(KERN_INFO "After send");
 	if ( 0 != r ) {
 		dev_err( dev, "rdev_assoc_req failed (%d)\n", r );
