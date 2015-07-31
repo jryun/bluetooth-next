@@ -100,19 +100,7 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	case IEEE802154_FC_TYPE_DATA:
 		return ieee802154_deliver_skb(skb);
 	case IEEE802154_FC_TYPE_ACK:
-		break;
 	case IEEE802154_FC_TYPE_MAC_CMD:
-		if( sdata->local->listen_flag == 1 ){
-			printk( KERN_INFO "Received MAC CMD");
-
-			printk("skb length is %lld\n",skb->len);
-
-			printk( KERN_INFO "Clear Flag");
-			sdata->local->listen_flag = 0;
-
-			return sdata->local->callback( skb, sdata->local->delayed_work );
-		}
-		break;
 	default:
 		pr_warn("ieee802154: bad frame received (type = %d)\n",
 			mac_cb(skb)->type);
