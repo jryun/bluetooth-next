@@ -168,7 +168,9 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	case IEEE802154_FC_TYPE_MAC_CMD:
 		pr_warn("ieee802154: command frame received (type = %d)\n",
 					mac_cb(skb)->type);
-		pr_warn("Command is type %x", skb->data[0]);
+		pr_warn("ieee802154: command frame is type %x", skb->data[0]);
+		pr_warn("ieee802154: command frame DSN is (DSN = %x)\n",
+							hdr->seq);
 		if( 0x2 == skb->data[0] ){
 			if ( sdata->local->assoc_resp_listener  && sdata->local->assoc_resp_work ){
 				printk( KERN_INFO "Received Association Response frame");
@@ -180,6 +182,8 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	default:
 		pr_warn("ieee802154: bad frame received (type = %d)\n",
 			mac_cb(skb)->type);
+		pr_warn("ieee802154: bad frame DSN is (DSN = %x)\n",
+									hdr->seq);
 		goto fail;
 	}
 
