@@ -20,11 +20,18 @@
 #include <net/mac802154.h>
 #include <net/netlink.h>
 #include <net/nl802154.h>
+#include <net/ieee802154_netdev.h>
 #include <net/sock.h>
 
 #include "nl802154.h"
 #include "rdev-ops.h"
 #include "core.h"
+
+#include "../mac802154/ieee802154_i.h"
+
+#ifndef PRIx64
+#define PRIx64 "llx"
+#endif
 
 struct work802154 {
 	// probably should add a mutex
@@ -1321,11 +1328,6 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 	wpan_dev = (struct wpan_dev *) &rdev->wpan_phy.dev;
 	dev = (struct net_device *) wpan_dev->netdev;
 
-    rdev_deregister_assoc_req_listener( rdev );
-	if ( 0 != r ) {
-		dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
-		goto out;
-    }
 	r = rdev_set_short_addr( rdev, wpan_dev, assoc_short_address );
 	if ( 0 != r ) {
 		dev_err( &dev->dev, "nla_put_failure (%d)\n", r );
@@ -1357,8 +1359,6 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
     r = genlmsg_reply( reply, info );
     goto out;
 
-
-
 nla_put_failure:
 free_reply:
     nlmsg_free( reply );
@@ -1366,16 +1366,25 @@ out:
     return;
 }
 
-static void nl802514_assoc_req_complete( struct sk_buff *skb, void* args)
-{
-	struct work802154 *wrk = container_of( to_delayed_work( (struct work_struct*) args ), struct work802154, work );
+static void nl802154_assoc_req_complete( struct sk_buff *skb_in, void *arg ) {
 
-	u16 short_addr = skb->data[2] << 8 | skb->data[1];
-	u8 status = skb->data[3];
+	struct work_struct *work = (struct work_struct *)arg;
+	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
+
+	struct genl_info *info = wrk->info;
+
+	struct cfg802154_registered_device *rdev = info->user_ptr[0];
+	struct net_device *dev = info->user_ptr[1];
+	struct wpan_dev *wpan_dev = dev->ieee802154_ptr;
+
+	u16 short_addr = *( (u16 *) &skb_in->data[1] );
+	u8 status = skb_in->data[3];
 
 	cancel_delayed_work( &wrk->work );
 
-	nl802154_assoc_cnf( wrk->info, short_addr, status );
+	rdev_deregister_assoc_req_listener( rdev, wpan_dev, nl802154_assoc_req_complete, work );
+
+	nl802154_assoc_cnf( info, short_addr, status );
 
 	complete( &wrk->completion );
 	kfree( wrk );
@@ -1389,11 +1398,93 @@ static void nl802154_assoc_req_timeout( struct work_struct *work ) {
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
 
 	struct genl_info *info = wrk->info;
+	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 
 	nl802154_assoc_cnf( info, assoc_short_address, status );
 
+    rdev_deregister_assoc_req_listener( rdev, NULL, nl802154_assoc_req_complete, work );
+
 	complete( &wrk->completion );
 	kfree( wrk );
+}
+
+static int
+nl802154_assoc_send_empty_data_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
+		u8 addr_mode, u16 coord_pan_id, u64 coord_addr)
+{
+
+	int r = 0;
+	struct sk_buff *skb;
+	struct ieee802154_mac_cb *cb;
+	int hlen, tlen, size;
+	struct ieee802154_addr dst_addr, source_addr;
+	unsigned char *data;
+	u64 src_addr;
+
+	src_addr = wpan_dev->extended_addr;
+
+	memset( &source_addr, 0, sizeof( source_addr ) );
+	memset( &dst_addr, 0, sizeof( dst_addr ) );
+
+	hlen = 18;
+	tlen = wpan_dev->netdev->needed_tailroom;
+	size = 1; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
+
+	skb = alloc_skb( hlen + tlen + size, GFP_KERNEL );
+	if (!skb){
+		goto error;
+	}
+
+	skb_reserve(skb, hlen);
+
+	skb_reset_network_header(skb);
+
+	data = skb_put(skb, size);
+
+	source_addr.mode = IEEE802154_ADDR_LONG;
+	source_addr.pan_id = IEEE802154_PANID_BROADCAST;
+	source_addr.extended_addr = src_addr;
+
+	dst_addr.mode = addr_mode;
+	dst_addr.pan_id = coord_pan_id;
+
+	if ( IEEE802154_ADDR_SHORT == addr_mode ){
+		dst_addr.short_addr = (__le16)coord_addr;
+	} else {
+		dst_addr.extended_addr = coord_addr;
+	}
+
+	cb = mac_cb_init(skb);
+	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
+	cb->ackreq = true;
+
+	cb->secen = false;
+	cb->secen_override = false;
+	cb->seclevel = 0;
+
+	cb->source = source_addr;
+	cb->dest = dst_addr;
+
+	cb->intra_pan = true;
+
+	r = wpan_dev->netdev->header_ops->create( skb, wpan_dev->netdev, ETH_P_IEEE802154, &dst_addr, &source_addr, hlen + tlen + size);
+
+	//Add the mac header to the data
+	memcpy( data, cb, size );
+	data[0] = IEEE802154_CMD_DATA_REQ;
+
+	skb->dev = wpan_dev->netdev;
+	skb->protocol = htons(ETH_P_IEEE802154);
+
+	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
+	if( 0 == r) {
+		goto out;
+	}
+
+error:
+	kfree_skb(skb);
+out:
+	return r;
 }
 
 static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
@@ -1405,6 +1496,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	u16 coord_pan_id;
 	u64 coord_address;
 	u8 capability_information;
+	char coord_addr_str[] = "0x0011223344556677";
 //	XXX: TODO
 //	u32 security_level;
 //	u32 key_id_mode;
@@ -1414,12 +1506,19 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 
 	struct cfg802154_registered_device *rdev;
 	struct work802154 *wrk;
+	struct net_device *netdev;
 	struct wpan_dev *wpan_dev;
-	struct net_device *dev;
+	struct device *logdev;
 
 	rdev = info->user_ptr[0];
-	wpan_dev = (struct wpan_dev *) &rdev->wpan_phy.dev;
-	dev = (struct net_device *) &wpan_dev->netdev;
+	netdev = info->user_ptr[1];
+	wpan_dev = netdev->ieee802154_ptr;
+
+	if ( wpan_dev->netdev != netdev ) {
+		printk( KERN_INFO "netdev (%p) != wpan_dev->netdev (%p)\n", netdev, wpan_dev->netdev );
+	}
+
+	logdev = &netdev->dev;
 
 	if ( ! (
 		info->attrs[ NL802154_ATTR_CHANNEL ] &&
@@ -1433,7 +1532,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		info->attrs[ NL802154_ATTR_ASSOC_CAP_INFO ] &&
 		info->attrs[ NL802154_ATTR_ASSOC_TIMEOUT_MS ]
 	) ) {
-		dev_err( &dev->dev, "invalid arguments\n" );
+		dev_err( logdev, "invalid arguments\n" );
 		r = -EINVAL;
 		goto out;
 	}
@@ -1448,29 +1547,33 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	case IEEE802154_ADDR_SHORT:
 		if ( info->attrs[ NL802154_ATTR_SHORT_ADDR ] ) {
 			coord_address = nla_get_u16( info->attrs[ NL802154_ATTR_SHORT_ADDR ] );
+			snprintf( coord_addr_str, sizeof(coord_addr_str), "0x%04x", (u16)coord_address );
 			break;
 		}
 		/* no break */
 	case IEEE802154_ADDR_LONG:
 		if ( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] ) {
 			coord_address = nla_get_u64( info->attrs[ NL802154_ATTR_EXTENDED_ADDR ] );
+			snprintf( coord_addr_str, sizeof(coord_addr_str), "0x%016" PRIx64, (u64)coord_address );
 			break;
 		}
 		/* no break */
 	default:
-		dev_err( &dev->dev, "invalid address / mode combination\n" );
+		dev_err( logdev, "invalid address / mode combination\n" );
 		r = -EINVAL;
 		goto out;
 	}
+
 	capability_information = nla_get_u8( info->attrs[ NL802154_ATTR_ASSOC_CAP_INFO ] );
+
 	if ( channel_page > IEEE802154_MAX_PAGE ) {
-		dev_err( &dev->dev, "invalid channel_page %u\n", channel_page );
+		dev_err( logdev, "invalid channel_page %u\n", channel_page );
 		r = -EINVAL;
 		goto out;
 	}
 
 	if ( BIT( channel_number ) & ~rdev->wpan_phy.supported.channels[ channel_page ] ) {
-		dev_err( &dev->dev, "invalid channel_number %u\n", channel_number );
+		dev_err( logdev, "invalid channel_number %u\n", channel_number );
 		r = -EINVAL;
 		goto out;
 	}
@@ -1486,35 +1589,45 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 
 	r = rdev_set_channel(rdev, channel_page, channel_number);
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "rdev_set_channel failed (%d)\n", r );
+		dev_err( logdev, "rdev_set_channel failed (%d)\n", r );
 		goto free_wrk;
 	}
 
-	r = rdev_register_assoc_req_listener( rdev, nl802514_assoc_req_complete, &wrk->work.work );
+	r = rdev_register_assoc_req_listener( rdev, NULL, nl802154_assoc_req_complete, &wrk->work.work );
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "register assoc_req listener failed (%d)\n", r );
+		dev_err( logdev, "register assoc_req listener failed (%d)\n", r );
 		goto free_wrk;
 	}
+
+	dev_dbg( logdev, "channel_number: %u, channel_page: %u, coord_addr_mode: %u, coord_pan_id: 0x%04x, coord_address: %s, capability_information: 0x%02x, timeout_ms: %u\n",
+		channel_number, channel_page, coord_addr_mode, coord_pan_id, coord_addr_str, capability_information, timeout_ms );
 
 	r = rdev_assoc_req( rdev, wpan_dev, channel_number, channel_page, coord_addr_mode, coord_pan_id, coord_address,
 			capability_information );
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "send assoc_req failed (%d)\n", r );
-		goto free_wrk;
+		dev_err( logdev, "send assoc_req failed (%d)\n", r );
+		goto dereg_listener;
 	}
 
+	// XXX: <BEGIN SNIP>
+	// XXX: FIXME: This needs to be handled in the completion function via state machine, not here
 	msleep(50);
-	r = rdev_assoc_empty_data_req( rdev, wpan_dev, coord_addr_mode, coord_pan_id, coord_address );
+
+	// XXX: define this function statically in this file.
+	// XXX: eventually, it should be handled from userspace
+	r = nl802154_assoc_send_empty_data_req( &rdev->wpan_phy, wpan_dev, coord_addr_mode, coord_pan_id, coord_address );
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "ack assoc_req failed (%d)\n", r );
-		goto free_wrk;
+		dev_err( logdev, "ack assoc_req failed (%d)\n", r );
+		goto dereg_listener;
 	}
+
+	// XXX: <END SNIP>
 
 	init_completion( &wrk->completion );
 	INIT_DELAYED_WORK( &wrk->work, nl802154_assoc_req_timeout );
 	r = schedule_delayed_work( &wrk->work, msecs_to_jiffies( timeout_ms ) ) ? 0 : -EALREADY;
 	if ( 0 != r ) {
-		dev_err( &dev->dev, "schedule_delayed_work failed (%d)\n", r );
+		dev_err( logdev, "schedule_delayed_work failed (%d)\n", r );
 		goto free_wrk;
 	}
 
@@ -1525,6 +1638,9 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 
 free_wrk:
 	kfree( wrk );
+
+dereg_listener:
+	rdev_deregister_assoc_req_listener( rdev, NULL, nl802154_assoc_req_complete, &wrk->work.work );
 
 out:
 	return r;
@@ -1541,9 +1657,6 @@ static inline bool is_extended_address( u64 addr ) {
 	return mask & addr;
 }
 
-#ifndef PRIx64
-#define PRIx64 "llx"
-#endif
 static void nl802154_disassoc_cnf( struct sk_buff *skb, struct genl_info *info, u8 status, u16 device_panid, u64 device_address ) {
 
 	int r;
@@ -1817,7 +1930,6 @@ static int nl802154_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 					rtnl_unlock();
 				return -EINVAL;
 			}
-
 			info->user_ptr[1] = dev;
 		} else {
 			info->user_ptr[1] = wpan_dev;
@@ -1987,7 +2099,7 @@ static const struct genl_ops nl802154_ops[] = {
 		.doit = nl802154_assoc_req,
 		.policy = nl802154_policy,
 		.flags = GENL_ADMIN_PERM,
-		.internal_flags = NL802154_FLAG_NEED_WPAN_PHY |
+		.internal_flags = NL802154_FLAG_NEED_NETDEV |
 				  NL802154_FLAG_NEED_RTNL,
 	},
 	{

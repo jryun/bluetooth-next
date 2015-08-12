@@ -268,35 +268,24 @@ rdev_assoc_req(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_d
 }
 
 static inline int
-rdev_assoc_empty_data_req(struct cfg802154_registered_device *rdev, struct wpan_dev *wpan_dev,
-		u8 coord_addr_mode, u16 coord_pan_id, u64 coord_address )
-{
-	int ret = 0;
-
-	ret = rdev->ops->assoc_empty_data_req( &rdev->wpan_phy, wpan_dev,
-			coord_addr_mode, coord_pan_id, coord_address );
-
-	return ret;
-}
-
-static inline int
 rdev_register_assoc_req_listener(struct cfg802154_registered_device *rdev,
-		void (*callback)( struct sk_buff *skb, void *args), struct work_struct *work )
+		struct wpan_dev *wpan_dev,
+		void (*callback)(struct sk_buff *skb, void *arg), void *arg)
 {
 	int ret = 0;
 
-	ret = rdev->ops->register_assoc_req_listener(&rdev->wpan_phy, callback, work);
+	ret = rdev->ops->register_assoc_req_listener(&rdev->wpan_phy, wpan_dev, callback, arg);
 
 	return ret;
 }
 
 
 static inline void
-rdev_deregister_assoc_req_listener( struct cfg802154_registered_device *rdev )
+rdev_deregister_assoc_req_listener( struct cfg802154_registered_device *rdev,
+		struct wpan_dev *wpan_dev,
+		void (*callback)(struct sk_buff *skb, void *arg), void *arg)
 {
-
-	rdev->ops->deregister_assoc_req_listener( &rdev->wpan_phy );
-
+	rdev->ops->deregister_disassoc_req_listener( &rdev->wpan_phy, wpan_dev, callback, arg );
 }
 
 static inline int
