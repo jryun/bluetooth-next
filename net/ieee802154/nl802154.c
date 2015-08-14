@@ -1705,11 +1705,15 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto free_wrk;
 	}
 
+	netdev->netdev_ops->ndo_stop(netdev);
+
 	rdev_set_pan_id(rdev, wpan_dev, coord_pan_id);
 	if ( 0 != r ) {
 		dev_err( logdev, "rdev_set_pan_id failed (%d)\n", r );
 		goto free_wrk;
 	}
+
+	netdev->netdev_ops->ndo_open(netdev);
 
 	r = rdev_register_assoc_req_listener( rdev, NULL, nl802154_assoc_req_complete, &wrk->work.work );
 	if ( 0 != r ) {
@@ -1719,6 +1723,13 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 
 	dev_dbg( logdev, "channel_number: %u, channel_page: %u, coord_addr_mode: %u, coord_pan_id: 0x%04x, coord_address: %s, capability_information: 0x%02x, timeout_ms: %u\n",
 		channel_number, channel_page, coord_addr_mode, coord_pan_id, coord_addr_str, capability_information, timeout_ms );
+
+	wpan_dev->coord_addr_mode = coord_addr_mode;
+	if (IEEE802154_ADDR_LONG == coord_addr_mode){
+	wpan_dev->coord_extended_addr = coord_address;
+	} else if (IEEE802154_ADDR_SHORT == coord_addr_mode){
+	wpan_dev->coord_short_addr = coord_address;
+	}
 
 	r = nl802154_assoc_send_assoc_req( &rdev->wpan_phy, wpan_dev, coord_addr_mode, coord_pan_id, coord_address, capability_information );
 	if ( 0 != r ) {
@@ -2032,6 +2043,8 @@ nla_put_failure:
 free_reply:
 	nlmsg_free( reply );
 out:
+	dev->netdev_ops->ndo_stop(dev);
+
 	rdev_set_coord_addr_mode( rdev, wpan_dev, IEEE802154_ADDR_NONE );
 	rdev_set_coord_short_addr( rdev, wpan_dev, IEEE802154_ADDR_UNDEF );
 	rdev_set_coord_extended_addr( rdev, wpan_dev, IEEE802154_PANID_BROADCAST );
@@ -2039,6 +2052,8 @@ out:
 	rdev_set_addr_mode( rdev, wpan_dev, IEEE802154_ADDR_NONE );
 	rdev_set_short_addr( rdev, wpan_dev, IEEE802154_ADDR_UNDEF );
 	rdev_set_pan_id( rdev, wpan_dev, IEEE802154_PANID_BROADCAST );
+
+	dev->netdev_ops->ndo_open(dev);
 	return;
 }
 
@@ -2063,7 +2078,8 @@ nl802154_send_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	memset( &dst_addr, 0, sizeof( dst_addr ) );
 
 	//Create beacon frame / payload
-	hlen = LL_RESERVED_SPACE(wpan_dev->netdev);
+	hlen = 2 + 2 + 1 + 8 + 2; // Packet Length + Frame Control + Sequence Number + Extended Source Addr for Disassociation Notification + Dest PAN ID
+	hlen += IEEE802154_ADDR_LONG == wpan_dev->coord_addr_mode ? 8 : 2; // Extended or Short Destination address
 	tlen = wpan_dev->netdev->needed_tailroom;
 	size = 2; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
 
@@ -2083,13 +2099,8 @@ nl802154_send_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	data = skb_put(skb, size);
 
-	src_addr.mode = wpan_dev->addr_mode;
-	src_addr.pan_id = wpan_dev->pan_id;
-	if ( IEEE802154_ADDR_LONG == src_addr.mode ) {
+	src_addr.mode = IEEE802154_ADDR_LONG;
 		src_addr.extended_addr = wpan_dev->extended_addr;
-	} else {
-		src_addr.short_addr = wpan_dev->short_addr;
-	}
 
 	dst_addr.mode = wpan_dev->coord_addr_mode;
 	dst_addr.pan_id = wpan_dev->pan_id;
@@ -2102,6 +2113,7 @@ nl802154_send_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	cb = mac_cb_init(skb);
 	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
 	cb->ackreq = true;
+	cb->intra_pan = true;
 
 	cb->secen = false;
 	cb->secen_override = false;
