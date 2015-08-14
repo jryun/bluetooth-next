@@ -445,11 +445,6 @@ ieee802154_deregister_disassoc_req_listener( struct wpan_phy *wpan_phy,
 {
 	int r;
 	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
-	BUG_ON( NULL == local );
-	if ( !( local->disassoc_req_callback == callback && local->disassoc_req_arg == arg ) ) {
-		r = -EINVAL;
-		goto out;
-	}
 	local->disassoc_req_callback = NULL;
 	local->disassoc_req_arg = NULL;
 	r = 0;
