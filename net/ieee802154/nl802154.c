@@ -1334,11 +1334,16 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 	netdev = info->user_ptr[1];
 	wpan_dev = netdev->ieee802154_ptr;
 
+	netdev->netdev_ops->ndo_open(netdev);
+	netdev->netdev_ops->ndo_stop(netdev);
+
 	r = rdev_set_short_addr( rdev, wpan_dev, assoc_short_address );
 	if ( 0 != r ) {
 		dev_err( &netdev->dev, "set short addr failure (%d)\n", r );
 		goto out;
     }
+
+	netdev->netdev_ops->ndo_open(netdev);
 
 	reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
@@ -1987,7 +1992,7 @@ static inline bool is_extended_address( u64 addr ) {
 	return mask & addr;
 }
 
-static void nl802154_disassoc_cnf( struct sk_buff *skb, struct genl_info *info, u8 status, u16 device_panid, u64 device_address ) {
+static void nl802154_disassoc_cnf( struct genl_info *info, u8 status, u16 device_panid, u64 device_address ) {
 
 	int r;
 
@@ -2078,7 +2083,7 @@ nl802154_send_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	memset( &dst_addr, 0, sizeof( dst_addr ) );
 
 	//Create beacon frame / payload
-	hlen = 2 + 2 + 1 + 8 + 2; // Packet Length + Frame Control + Sequence Number + Extended Source Addr for Disassociation Notification + Dest PAN ID
+	hlen = 2 + 2 + 1 + 8 + 2 + 2; // Packet Length + Frame Control + Sequence Number + Extended Source Addr for Association Request + Source PAN ID + Dest PAN ID
 	hlen += IEEE802154_ADDR_LONG == wpan_dev->coord_addr_mode ? 8 : 2; // Extended or Short Destination address
 	tlen = wpan_dev->netdev->needed_tailroom;
 	size = 2; //Todo: Replace magic number. Comes from ieee std 802154 "Association Request Frame Format" with a define
@@ -2100,7 +2105,9 @@ nl802154_send_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	data = skb_put(skb, size);
 
 	src_addr.mode = IEEE802154_ADDR_LONG;
-		src_addr.extended_addr = wpan_dev->extended_addr;
+	src_addr.extended_addr = wpan_dev->extended_addr;
+
+	printk(KERN_INFO "src_addr MODE: %x \n PAN_ID %x \n SHORT %x \n EXTENDED %llx\n",src_addr.mode, src_addr.pan_id, src_addr.short_addr, src_addr.extended_addr);
 
 	dst_addr.mode = wpan_dev->coord_addr_mode;
 	dst_addr.pan_id = wpan_dev->pan_id;
@@ -2109,6 +2116,8 @@ nl802154_send_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 	} else {
 		dst_addr.extended_addr = wpan_dev->coord_extended_addr;
 	}
+
+	printk(KERN_INFO "dst_addr MODE: %x \n PAN_ID %x \n SHORT %x \n EXTENDED %llx\n",dst_addr.mode, dst_addr.pan_id, dst_addr.short_addr, dst_addr.extended_addr);
 
 	cb = mac_cb_init(skb);
 	cb->type = IEEE802154_FC_TYPE_MAC_CMD;
@@ -2164,7 +2173,6 @@ static void nl802154_disassoc_req_complete( struct sk_buff *skb_in, void *arg ) 
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
 
 	struct genl_info *info = wrk->info;
-	struct sk_buff *skb_out = wrk->skb;
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
@@ -2178,7 +2186,7 @@ static void nl802154_disassoc_req_complete( struct sk_buff *skb_in, void *arg ) 
 
 	rdev_deregister_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, work );
 
-	nl802154_disassoc_cnf( skb_out, wrk->info, status, wrk->cmd_stuff.disassoc.device_panid, wrk->cmd_stuff.disassoc.device_address );
+	nl802154_disassoc_cnf( wrk->info, status, wrk->cmd_stuff.disassoc.device_panid, wrk->cmd_stuff.disassoc.device_address );
 
 	complete( &wrk->completion );
 	kfree( wrk );
@@ -2191,7 +2199,6 @@ static void nl802154_disassoc_req_timeout( struct work_struct *work ) {
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
 
 	struct genl_info *info = wrk->info;
-	struct sk_buff *skb_out = wrk->skb;
 
 	struct cfg802154_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
@@ -2199,9 +2206,9 @@ static void nl802154_disassoc_req_timeout( struct work_struct *work ) {
 
 	dev_err( &dev->dev, "%s\n", __FUNCTION__ );
 
-	rdev_deregister_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, (void *)work );
+	rdev_deregister_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, work );
 
-	nl802154_disassoc_cnf( skb_out, wrk->info, status, wrk->cmd_stuff.disassoc.device_panid, wrk->cmd_stuff.disassoc.device_address );
+	nl802154_disassoc_cnf( wrk->info, status, wrk->cmd_stuff.disassoc.device_panid, wrk->cmd_stuff.disassoc.device_address );
 
 	complete( &wrk->completion );
 	kfree( wrk );
@@ -2276,6 +2283,8 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 
 	wrk->skb = skb;
 	wrk->info = info;
+	wrk->cmd_stuff.disassoc.device_address = device_address;
+	wrk->cmd_stuff.disassoc.device_panid = device_panid;
 
 	r = rdev_register_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, &wrk->work.work );
 	if ( 0 != r ) {
