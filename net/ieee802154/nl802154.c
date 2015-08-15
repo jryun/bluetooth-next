@@ -2274,16 +2274,10 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto out;
 	}
 
-	wrk->cmd = NL802154_CMD_DISASSOC_REQ;
 	wrk->skb = skb;
 	wrk->info = info;
-	wrk->cmd_stuff.disassoc.device_panid = device_panid;
-	wrk->cmd_stuff.disassoc.device_address = device_address;
 
-	init_completion( &wrk->completion );
-	INIT_DELAYED_WORK( &wrk->work, nl802154_disassoc_req_timeout );
-
-	r = rdev_register_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, wrk );
+	r = rdev_register_disassoc_req_listener( rdev, wpan_dev, nl802154_disassoc_req_complete, &wrk->work.work );
 	if ( 0 != r ) {
 		dev_err( &dev->dev, "rdev_register_disassoc_listener failed (%d)\n", r );
 		goto free_wrk;
@@ -2295,6 +2289,8 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto dereg_listener;
 	}
 
+	init_completion( &wrk->completion );
+	INIT_DELAYED_WORK( &wrk->work, nl802154_disassoc_req_timeout );
 	r = schedule_delayed_work( &wrk->work, msecs_to_jiffies( timeout_ms ) ) ? 0 : -EALREADY;
 	if ( 0 != r ) {
 		dev_err( &dev->dev, "schedule_delayed_work failed (%d)\n", r );
