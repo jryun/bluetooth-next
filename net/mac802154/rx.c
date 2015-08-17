@@ -34,6 +34,8 @@ static int ieee802154_deliver_skb(struct sk_buff *skb)
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->protocol = htons(ETH_P_IEEE802154);
 
+	pr_debug("received beacon packet via interface %s\n", skb->dev->name);
+
 	return netif_receive_skb(skb);
 }
 
@@ -45,7 +47,9 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	__le16 span, sshort;
 	int rc;
 
-	pr_debug("getting packet via slave interface %s\n", sdata->dev->name);
+	dev_dbg( &wpan_dev->netdev->dev, "getting packet via slave interface %s\n", sdata->dev->name);
+
+	dev_dbg( &wpan_dev->netdev->dev, "Frame Type received (type = %d)\n", mac_cb(skb)->type);
 
 	span = wpan_dev->pan_id;
 	sshort = wpan_dev->short_addr;
@@ -96,9 +100,20 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 	sdata->dev->stats.rx_packets++;
 	sdata->dev->stats.rx_bytes += skb->len;
 
-	switch (mac_cb(skb)->type) {
+	switch (hdr->fc.type) {
 	case IEEE802154_FC_TYPE_DATA:
+		dev_dbg( &wpan_dev->netdev->dev, "Received Data Frame Control");
 		return ieee802154_deliver_skb(skb);
+	case IEEE802154_FC_TYPE_BEACON:
+		if( sdata->local->active_scan_callback && sdata->local->active_scan_arg ) {
+			sdata->local->active_scan_callback( skb, hdr, sdata->local->active_scan_arg );
+			return 0;
+		}
+		if( sdata->local->beacon_ind_callback ) {
+			sdata->local->beacon_ind_callback( skb, hdr, sdata->local->beacon_ind_arg );
+			return 0;
+		}
+		goto fail;
 	case IEEE802154_FC_TYPE_MAC_CMD:
 		if( 0x2 == skb->data[0] ){
 			if ( sdata->local->assoc_req_callback ){
