@@ -458,6 +458,36 @@ out:
 }
 
 static int
+ieee802154_register_active_scan_listener(struct wpan_phy *wpan_phy,
+		void (*callback)( struct sk_buff *, const struct ieee802154_hdr *, void *),
+		void *arg)
+{
+	int ret = 0;
+	struct ieee802154_local *local = wpan_phy_priv( wpan_phy );
+
+	local->active_scan_callback = callback;
+	local->active_scan_arg = arg;
+	ret = drv_start( local );
+	if( 0 != ret ) {
+		local->active_scan_callback = NULL;
+		local->active_scan_arg = NULL;
+	}
+	return ret;
+}
+
+static int
+ieee802154_deregister_active_scan_listener( struct wpan_phy *wpan_phy,
+		void (*callback)( struct sk_buff *, const struct ieee802154_hdr *, void *),
+		void *arg)
+{
+	int ret = 0;
+	struct ieee802154_local *local = wpan_phy_priv(wpan_phy);
+	local->active_scan_callback = NULL;
+	local->active_scan_arg = NULL;
+	return ret;
+}
+
+static int
 ieee802154_register_assoc_req_listener( struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev, void (*callback)(struct sk_buff *, void *), void *arg )
 {
 	int r;
@@ -519,10 +549,12 @@ const struct cfg802154_ops mac802154_config_ops = {
 	.set_max_frame_retries = ieee802154_set_max_frame_retries,
 	.set_lbt_mode = ieee802154_set_lbt_mode,
 	.ed_scan = ieee802154_ed_scan,
-	.register_beacon_listener = ieee802154_register_beacon_listener,
+	.register_active_scan_listener = ieee802154_register_active_scan_listener,
 	.deregister_beacon_listener = ieee802154_deregister_beacon_listener,
 	.register_assoc_req_listener = ieee802154_register_assoc_req_listener,
 	.deregister_assoc_req_listener = ieee802154_deregister_assoc_req_listener,
 	.register_disassoc_req_listener = ieee802154_register_disassoc_req_listener,
 	.deregister_disassoc_req_listener = ieee802154_deregister_disassoc_req_listener,
+	.deregister_active_scan_listener = ieee802154_deregister_active_scan_listener,
+	.register_beacon_listener = ieee802154_register_beacon_listener,
 };
