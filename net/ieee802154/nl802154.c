@@ -1737,7 +1737,7 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto free_wrk;
 	}
 
-	netdev->netdev_ops->ndo_open(netdev);
+	r = netdev->netdev_ops->ndo_open(netdev);
 	if ( 0 != r ) {
 		dev_err( &netdev->dev, "ndo_open failure (%d)\n", r );
 		goto out;
