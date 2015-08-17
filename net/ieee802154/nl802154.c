@@ -1312,6 +1312,39 @@ enum {
 	MAC_ERR_INVALID_PARAMETER,
 };
 
+static inline int set_short_addr(struct cfg802154_registered_device *rdev,
+	    struct wpan_dev *wpan_dev, struct net_device *netdev, __le16 short_addr)
+{
+	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(netdev);
+	struct ieee802154_local *local = sdata->local;
+
+	int r = 0;
+
+	r = netdev->netdev_ops->ndo_stop(netdev);
+	if ( 0 != r ) {
+		dev_err( &netdev->dev, "ndo_stop failure (%d)\n", r );
+		goto out;
+	}
+	r = rdev_set_short_addr( rdev, wpan_dev, short_addr );
+	if ( 0 != r ) {
+		dev_err( &netdev->dev, "rdev set short addr failure (%d)\n", r );
+		goto out;
+	}
+	r = drv_set_short_addr( local, short_addr);
+	if ( 0 != r ) {
+		dev_err( &netdev->dev, "drv_set_short_addr failure (%d)\n", r );
+		goto out;
+	}
+	r = netdev->netdev_ops->ndo_open(netdev);
+	if ( 0 != r ) {
+		dev_err( &netdev->dev, "ndo_open failure (%d)\n", r );
+		goto out;
+	}
+	out:
+	return r;
+
+}
+
 static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address, u8 status )
 {
 	int r;
@@ -1327,8 +1360,15 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 	dev = info->user_ptr[1];
 	wpan_dev = dev->ieee802154_ptr;
 
-	dev->netdev_ops->ndo_open(dev);
-	dev->netdev_ops->ndo_stop(dev);
+	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(dev);
+	struct ieee802154_local *local = sdata->local;
+
+	printk("Inside %s\n",__FUNCTION__);
+	printk("rdev is %x\n",rdev);
+	printk("wpan_dev is %x\n",wpan_dev);
+	printk("netdev is %x\n",dev);
+	printk("ndo_stop is %x\n",dev->netdev_ops->ndo_stop);
+	printk("ndo_open is %x\n",dev->netdev_ops->ndo_open);
 
 	r = rdev_set_short_addr( rdev, wpan_dev, assoc_short_address );
 	if ( 0 != r ) {
@@ -1336,7 +1376,7 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 		goto out;
     }
 
-	dev->netdev_ops->ndo_open(dev);
+	printk("got past set_short_addr\n");
 
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
@@ -1703,7 +1743,19 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto free_wrk;
 	}
 
-	netdev->netdev_ops->ndo_stop(netdev);
+
+printk("Inside %s\n",__FUNCTION__);
+printk("rdev is %x\n",rdev);
+printk("wpan_dev is %x\n",wpan_dev);
+printk("netdev is %x\n",netdev);
+printk("ndo_stop is %x\n",netdev->netdev_ops->ndo_stop);
+printk("ndo_open is %x\n",netdev->netdev_ops->ndo_open);
+
+	r = netdev->netdev_ops->ndo_stop(netdev);
+	if ( 0 != r ) {
+		dev_err( logdev, "ndo_stop failure (%d)\n", r );
+		goto out;
+    }
 
 	r = rdev_set_pan_id(rdev, wpan_dev, coord_pan_id);
 	if ( 0 != r ) {
@@ -1711,7 +1763,11 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto free_wrk;
 	}
 
-	netdev->netdev_ops->ndo_open(netdev);
+	r = netdev->netdev_ops->ndo_open(netdev);
+	if ( 0 != r ) {
+		dev_err( logdev, "ndo_stop failure (%d)\n", r );
+		goto out;
+    }
 
 	r = rdev_register_assoc_req_listener( rdev, NULL, nl802154_assoc_req_complete, &wrk->work.work );
 	if ( 0 != r ) {
@@ -1751,6 +1807,9 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	}
 
 	wait_for_completion( &wrk->completion );
+
+	netdev->netdev_ops->ndo_stop(netdev);
+	netdev->netdev_ops->ndo_open(netdev);
 
 	r = 0;
 	goto out;
