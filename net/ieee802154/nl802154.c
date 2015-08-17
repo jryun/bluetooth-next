@@ -1312,39 +1312,6 @@ enum {
 	MAC_ERR_INVALID_PARAMETER,
 };
 
-static inline int set_short_addr(struct cfg802154_registered_device *rdev,
-	    struct wpan_dev *wpan_dev, struct net_device *netdev, __le16 short_addr)
-{
-	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(netdev);
-	struct ieee802154_local *local = sdata->local;
-
-	int r = 0;
-
-	r = netdev->netdev_ops->ndo_stop(netdev);
-	if ( 0 != r ) {
-		dev_err( &netdev->dev, "ndo_stop failure (%d)\n", r );
-		goto out;
-	}
-	r = rdev_set_short_addr( rdev, wpan_dev, short_addr );
-	if ( 0 != r ) {
-		dev_err( &netdev->dev, "rdev set short addr failure (%d)\n", r );
-		goto out;
-	}
-	r = drv_set_short_addr( local, short_addr);
-	if ( 0 != r ) {
-		dev_err( &netdev->dev, "drv_set_short_addr failure (%d)\n", r );
-		goto out;
-	}
-	r = netdev->netdev_ops->ndo_open(netdev);
-	if ( 0 != r ) {
-		dev_err( &netdev->dev, "ndo_open failure (%d)\n", r );
-		goto out;
-	}
-	out:
-	return r;
-
-}
-
 static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address, u8 status )
 {
 	int r;
