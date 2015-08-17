@@ -1756,11 +1756,6 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 		goto out;
     }
 
-	r = netdev->netdev_ops->ndo_open(netdev);
-	if ( 0 != r ) {
-		dev_warn( logdev, "ndo_open failed (%d)\n", r );
-	}
-
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
         r = -ENOMEM;
