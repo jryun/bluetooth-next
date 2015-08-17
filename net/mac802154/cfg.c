@@ -248,12 +248,12 @@ ieee802154_set_coord_addr_mode(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_
 
 	ASSERT_RTNL();
 
-	if (wpan_dev->addr_mode == mode)
+	if (wpan_dev->coord_addr_mode == mode)
 		return 0;
 
 	ret = mac802154_wpan_update_llsec(wpan_dev->netdev);
 	if (!ret)
-		wpan_dev->addr_mode = mode;
+		wpan_dev->coord_addr_mode = mode;
 
 	return ret;
 }
