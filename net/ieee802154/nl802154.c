@@ -1327,9 +1327,6 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 	dev = info->user_ptr[1];
 	wpan_dev = dev->ieee802154_ptr;
 
-	struct ieee802154_sub_if_data *sdata = IEEE802154_DEV_TO_SUB_IF(dev);
-	struct ieee802154_local *local = sdata->local;
-
 	r = rdev_set_short_addr( rdev, wpan_dev, assoc_short_address );
 	if ( 0 != r ) {
 		dev_err( &dev->dev, "set short addr failure (%d)\n", r );
