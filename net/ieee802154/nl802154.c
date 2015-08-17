@@ -1739,11 +1739,6 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 		goto out;
     }
 
-	r = netdev->netdev_ops->ndo_open(netdev);
-	if ( 0 != r ) {
-		dev_warn( logdev, "ndo_open failed (%d)\n", r );
-	}
-
     reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
         r = -ENOMEM;
@@ -2585,11 +2580,10 @@ nl802154_send_disassoc_req(struct wpan_phy *wpan_phy, struct wpan_dev *wpan_dev,
 
 	r = ieee802154_subif_start_xmit( skb, wpan_dev->netdev );
 	dev_dbg( logdev, "r value is %x\n", r );
-	if( 0 == r) {
+	if( 0 != r) {
 		goto error;
 	}
 
-	r = 0;
 	goto out;
 
 error:
@@ -2627,7 +2621,7 @@ static void nl802154_disassoc_req_complete( struct sk_buff *skb_in, void *arg ) 
 
 static void nl802154_disassoc_req_timeout( struct work_struct *work ) {
 
-	static const u8 status = IEEE802154_NO_ACK;
+	static const u8 status = IEEE802154_SUCCESS;
 
 	struct work802154 *wrk = container_of( to_delayed_work( work ), struct work802154, work );
 
@@ -2735,7 +2729,6 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 	wrk->cmd_stuff.disassoc.device_panid = device_panid;
 	wrk->cmd_stuff.disassoc.device_address = device_address;
 
-#if 0
 	// XXX: ATUSB hardware does not propogate ACK packets up via USB.
 	// XXX: This may be something correctable just via setting ATRF registers
 	// XXX: but it might require modifying the ATMega firmware.
@@ -2764,17 +2757,6 @@ static int nl802154_disassoc_req( struct sk_buff *skb, struct genl_info *info )
 	}
 
 	wait_for_completion( &wrk->completion );
-#else
-
-	r = nl802154_send_disassoc_req( &rdev->wpan_phy, wpan_dev, device_panid, device_address, disassociate_reason, tx_indirect );
-	if ( 0 != r ) {
-		dev_err( logdev, "rdev_disassoc_req failed (%d)\n", r );
-		goto dereg_listener;
-	}
-
-	nl802154_disassoc_cnf( skb, info, IEEE802154_SUCCESS, device_panid, device_address );
-
-#endif
 
 	r = 0;
 	goto out;
