@@ -1334,8 +1334,19 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 	netdev = info->user_ptr[1];
 	wpan_dev = netdev->ieee802154_ptr;
 
-	netdev->netdev_ops->ndo_open(netdev);
-	netdev->netdev_ops->ndo_stop(netdev);
+	r = netdev->netdev_ops->ndo_open(netdev);
+	if ( 0 != r ) {
+		dev_err( &netdev->dev, "ndo_open failure (%d)\n", r );
+		goto out;
+	}
+
+
+	r = netdev->netdev_ops->ndo_stop(netdev);
+	if ( 0 != r ) {
+		dev_err( &netdev->dev, "ndo_stop failure (%d)\n", r );
+		goto out;
+	}
+
 
 	r = rdev_set_short_addr( rdev, wpan_dev, assoc_short_address );
 	if ( 0 != r ) {
@@ -1343,7 +1354,11 @@ static void nl802154_assoc_cnf( struct genl_info *info, u16 assoc_short_address,
 		goto out;
     }
 
-	netdev->netdev_ops->ndo_open(netdev);
+	r = netdev->netdev_ops->ndo_open(netdev);
+	if ( 0 != r ) {
+		dev_err( &netdev->dev, "ndo_open failure (%d)\n", r );
+		goto out;
+	}
 
 	reply = nlmsg_new( NLMSG_DEFAULT_SIZE, GFP_KERNEL );
     if ( NULL == reply ) {
@@ -1710,7 +1725,11 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 		goto free_wrk;
 	}
 
-	netdev->netdev_ops->ndo_stop(netdev);
+	r = netdev->netdev_ops->ndo_stop(netdev);
+	if ( 0 != r ) {
+		dev_err( &netdev->dev, "ndo_stop failure (%d)\n", r );
+		goto out;
+	}
 
 	rdev_set_pan_id(rdev, wpan_dev, coord_pan_id);
 	if ( 0 != r ) {
@@ -1719,6 +1738,10 @@ static int nl802154_assoc_req( struct sk_buff *skb, struct genl_info *info )
 	}
 
 	netdev->netdev_ops->ndo_open(netdev);
+	if ( 0 != r ) {
+		dev_err( &netdev->dev, "ndo_open failure (%d)\n", r );
+		goto out;
+	}
 
 	r = rdev_register_assoc_req_listener( rdev, NULL, nl802154_assoc_req_complete, &wrk->work.work );
 	if ( 0 != r ) {
